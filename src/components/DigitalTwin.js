@@ -20,8 +20,6 @@ const DigitalTwin = () => {
   const [error, setError] = useState(null);
 
   const viewerRef = useRef(null);
-  // Guard so the camera only flies once on initial position load,
-  // instead of re-flying every 1.5s and causing jitter + excess Ion requests
   const hasFlownRef = useRef(false);
 
   // Fetch satellite data (TLE lines)
@@ -57,8 +55,6 @@ const DigitalTwin = () => {
 
     const updatePosition = () => {
       try {
-        // tle.js expects either a TLE object or an array [line1, line2]
-        // Pass the array directly — works with tle.js v4+
         const info = getSatelliteInfo(tle, Date.now());
         if (info && typeof info.lat === 'number' && !isNaN(info.lat)) {
           setCurrentPosition({
@@ -78,13 +74,10 @@ const DigitalTwin = () => {
     return () => clearInterval(interval);
   }, [tle]);
 
-  // Auto-follow camera — only flies ONCE on first valid position.
-  // After that the globe stays in place and the satellite dot moves naturally.
-  // Re-flying every 1.5s was causing the "Request has failed" Ion errors
-  // because Cesium fires off new tile/asset requests on every flyTo call.
+  // Auto-follow camera — only flies ONCE on first valid position
   useEffect(() => {
     if (!currentPosition || !viewerRef.current?.cesiumElement) return;
-    if (hasFlownRef.current) return; // skip after first fly
+    if (hasFlownRef.current) return;
 
     hasFlownRef.current = true;
     const viewer = viewerRef.current.cesiumElement;
@@ -93,7 +86,7 @@ const DigitalTwin = () => {
       destination: Cesium.Cartesian3.fromRadians(
         currentPosition.lng,
         currentPosition.lat,
-        currentPosition.height + 800000 // zoom distance in meters
+        currentPosition.height + 800000
       ),
       orientation: {
         heading: Cesium.Math.toRadians(0),
@@ -132,8 +125,6 @@ const DigitalTwin = () => {
     );
   }
 
-  // Show a loading state while we wait for the first position fix
-  // instead of a hard error — TLE propagation can take a moment
   if (!currentPosition) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
@@ -163,13 +154,12 @@ const DigitalTwin = () => {
         requestRenderMode={true}
         backgroundColor={Cesium.Color.BLACK}
         imageryProvider={
-          new Cesium.OpenStreetMapImageryProvider({
-            url: 'https://tile.openstreetmap.org/'
+          new Cesium.TileMapServiceImageryProvider({
+            url: Cesium.buildModuleUrl('Assets/Textures/NaturalEarthII')
           })
         }
         terrainProvider={new Cesium.EllipsoidTerrainProvider({})}
       >
-        {/* Satellite entity — point marker + label */}
         <Entity
           name={satellite.name}
           position={Cesium.Cartesian3.fromRadians(
