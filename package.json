@@ -10,7 +10,7 @@
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.13.2",
-    "cesium": "^1.134.1",
+    "cesium": "^1.138.0",
     "chart.js": "^4.5.1",
     "cross-env": "^7.0.3",
     "leaflet": "^1.9.4",
@@ -21,6 +21,7 @@
     "react-router-dom": "^7.9.4",
     "react-scripts": "^5.0.1",
     "recharts": "^3.5.1",
+    "resium": "^1.19.4",
     "satellite.js": "^6.0.1",
     "tle.js": "^5.0.1",
     "web-vitals": "^2.1.4"

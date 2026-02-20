@@ -1,18 +1,27 @@
-// src/components/DigitalTwin.js
-import React, { useEffect, useState } from 'react';
+// src/components/DigitalTwin.js — Phase 1: 3D Mission Control Viewer
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from '../api';
 import { useAuth } from '@clerk/clerk-react';
+import { Viewer, Entity, CameraFlyTo } from 'resium';
+import * as Cesium from 'cesium';
+import { getSatelliteInfo } from 'tle.js';
+
+Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiYWQ4MDMxMi0wYTcxLTQxMDYtYWUxZi1mOTdmOGY3OGFkZGQiLCJpZCI6MzU1Njc1LCJpYXQiOjE3NzE1NTMxODB9.ghh9VL3LJS6JJCcg_3NYWI0ho49aTl8XKIb2Qtxt98w';
 
 const DigitalTwin = () => {
   const { noradId } = useParams();
   const { getToken } = useAuth();
 
   const [satellite, setSatellite] = useState(null);
+  const [tle, setTle] = useState(null);
+  const [currentPosition, setCurrentPosition] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load the satellite data (same as SatelliteDetails)
+  const viewerRef = useRef(null);
+
+  // Fetch satellite data (TLE lines)
   useEffect(() => {
     const fetchSatellite = async () => {
       setLoading(true);
@@ -23,9 +32,12 @@ const DigitalTwin = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         setSatellite(res.data);
+
+        if (res.data.tle_line1 && res.data.tle_line2) {
+          setTle([res.data.tle_line1.trim(), res.data.tle_line2.trim()]);
+        }
       } catch (err) {
-        const msg = err.response?.data?.error || err.message || 'Unknown error';
-        setError(msg);
+        setError(err.response?.data?.error || err.message || 'Failed to load satellite');
       } finally {
         setLoading(false);
       }
@@ -33,6 +45,51 @@ const DigitalTwin = () => {
 
     fetchSatellite();
   }, [noradId, getToken]);
+
+  // Real-time SGP4 propagation
+  useEffect(() => {
+    if (!tle) return;
+
+    const updatePosition = () => {
+      try {
+        const info = getSatelliteInfo(tle, Date.now());
+        if (info && typeof info.lat === 'number' && !isNaN(info.lat)) {
+          setCurrentPosition({
+            lat: Cesium.Math.toRadians(info.lat),
+            lng: Cesium.Math.toRadians(info.lng),
+            height: (info.height || 420) * 1000, // convert km to meters
+            velocity: info.velocity || 7.66 // km/s fallback
+          });
+        }
+      } catch (err) {
+        console.error('SGP4 error:', err);
+      }
+    };
+
+    updatePosition();
+    const interval = setInterval(updatePosition, 1500);
+    return () => clearInterval(interval);
+  }, [tle]);
+
+  // Auto-follow camera
+  useEffect(() => {
+    if (!currentPosition || !viewerRef.current?.cesiumElement) return;
+
+    const viewer = viewerRef.current.cesiumElement;
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromRadians(
+        currentPosition.lng,
+        currentPosition.lat,
+        currentPosition.height + 800000 // zoom distance in meters
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-35), // look slightly down
+        roll: 0.0
+      },
+      duration: 2.5
+    });
+  }, [currentPosition]);
 
   if (loading) {
     return (
@@ -44,60 +101,93 @@ const DigitalTwin = () => {
     );
   }
 
-  if (error || !satellite) {
+  if (error || !satellite || !currentPosition) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-red-400 text-xl font-mono">
-          Error loading satellite: {error || 'Not found'}
+          {error || 'No valid TLE / position available'}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-5xl md:text-7xl font-black tracking-tighter text-cyan-300">
-            Digital Twin — {satellite.name}
-          </h1>
-          <p className="mt-3 text-slate-400 font-mono">
-            NORAD ID: <span className="text-cyan-400">{noradId}</span>
-          </p>
-        </div>
+    <div className="relative min-h-screen bg-black text-white overflow-hidden">
+      {/* Full-screen Cesium Viewer */}
+      <Viewer
+        ref={viewerRef}
+        full
+        baseLayerPicker={false}
+        geocoder={false}
+        homeButton={false}
+        sceneModePicker={false}
+        navigationHelpButton={false}
+        timeline={false}
+        animation={false}
+        skyBox={false}
+        skyAtmosphere={false}
+        requestRenderMode={true}
+        backgroundColor={Cesium.Color.BLACK}
+      >
+        {/* Satellite entity with point + label */}
+        <Entity
+          name={satellite.name}
+          position={Cesium.Cartesian3.fromRadians(
+            currentPosition.lng,
+            currentPosition.lat,
+            currentPosition.height
+          )}
+          point={{
+            pixelSize: 14,
+            color: Cesium.Color.CYAN,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2
+          }}
+          label={{
+            text: `${satellite.name}\nAlt: ${Math.round(currentPosition.height / 1000)} km`,
+            font: 'bold 18px Arial',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            pixelOffset: new Cesium.Cartesian2(0, -30)
+          }}
+        />
+      </Viewer>
 
-        {/* Placeholder for 3D viewer + controls */}
-        <div className="bg-slate-900/60 border border-cyan-900/30 rounded-3xl overflow-hidden h-[70vh] flex items-center justify-center">
-          <div className="text-center px-8">
-            <h2 className="text-3xl font-bold text-cyan-300 mb-6">
-              3D Digital Twin Viewer
-            </h2>
-            <p className="text-lg text-slate-400 mb-8 max-w-2xl mx-auto">
-              Coming soon: Real-time 3D visualization of your satellite, live orbit propagation using SGP4, and a maneuver planning sandbox powered by Poliastro.
-            </p>
-            <p className="text-slate-500">
-              This page will load the latest TLE and show dynamic orbit simulation.
-            </p>
+      {/* Floating HUD – current state */}
+      <div className="fixed top-6 left-6 right-6 max-w-5xl mx-auto z-10 pointer-events-none">
+        <div className="bg-slate-900/75 backdrop-blur-lg border border-cyan-800/40 rounded-2xl p-6 shadow-2xl">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-widest">NORAD ID</p>
+              <p className="text-2xl font-bold text-cyan-300">{noradId}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-widest">Latitude</p>
+              <p className="text-2xl font-bold text-white">{Cesium.Math.toDegrees(currentPosition.lat).toFixed(4)}°</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-widest">Longitude</p>
+              <p className="text-2xl font-bold text-white">{Cesium.Math.toDegrees(currentPosition.lng).toFixed(4)}°</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-widest">Altitude</p>
+              <p className="text-2xl font-bold text-green-400">{Math.round(currentPosition.height / 1000)} km</p>
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Future sections: controls, stats, maneuver inputs */}
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Example future cards */}
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-cyan-300 mb-3">Current Position</h3>
-            <p className="text-slate-400">Loading...</p>
-          </div>
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-cyan-300 mb-3">Next Maneuver Suggestion</h3>
-            <p className="text-slate-400">Coming soon</p>
-          </div>
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-cyan-300 mb-3">Fuel Optimization</h3>
-            <p className="text-slate-400">Simulation results coming soon</p>
-          </div>
-        </div>
+      {/* Back button */}
+      <div className="fixed bottom-6 left-6 z-10">
+        <button
+          onClick={() => window.history.back()}
+          className="px-6 py-3 bg-slate-800/80 hover:bg-slate-700 rounded-full text-white font-medium shadow-lg transition-all"
+        >
+          ← Back to Details
+        </button>
       </div>
     </div>
   );
