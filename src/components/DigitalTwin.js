@@ -146,13 +146,6 @@ const DigitalTwin = () => {
 
   return (
     <div className="relative min-h-screen bg-black text-white overflow-hidden">
-      {/* Full-screen Cesium Viewer
-          KEY FIXES:
-          - imageryProvider: Use OpenStreetMap (no Ion asset required) to eliminate
-            the "Request has failed" Ion tile errors.
-          - terrainProvider: Use EllipsoidTerrainProvider (flat ellipsoid, no Ion
-            terrain requests) to further cut down on Ion asset calls.
-          These two props are the primary cause of the runtime errors you were seeing. */}
       <Viewer
         ref={viewerRef}
         full
