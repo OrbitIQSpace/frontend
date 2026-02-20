@@ -1,9 +1,10 @@
-// src/index.js
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import App from './App';
 import { ClerkProvider } from '@clerk/clerk-react';
+
+window.CESIUM_BASE_URL = '/cesium';
 
 const publishableKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
 
