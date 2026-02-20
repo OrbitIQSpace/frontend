@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom'; // ← Added useNavigate
+import { useParams, Link } from 'react-router-dom';
 import axios from '../api'; 
 import Upload from './Upload';
 import SatelliteMap from './SatelliteMap';
@@ -31,7 +31,6 @@ ChartJS.register(
 const SatelliteDetails = () => {
   const { noradId } = useParams();
   const { getToken } = useAuth();
-  const navigate = useNavigate(); // ← To navigate to Digital Twin
 
   const [satellite, setSatellite] = useState(null);
   const [telemetry, setTelemetry] = useState([]);
@@ -195,7 +194,7 @@ const SatelliteDetails = () => {
           ))}
         </div>
 
-        {/* TAB 1: GLOBAL TRACKING */}
+        {/* TAB CONTENT */}
         {activeTab === 'tracking' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-in fade-in duration-700">
             <div className="lg:col-span-1 space-y-4">
