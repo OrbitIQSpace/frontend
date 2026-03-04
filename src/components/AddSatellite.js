@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import axios from '../api'; 
+import axios from '../api';
 import { useAuth } from '@clerk/clerk-react';
 
 const AddSatellite = ({ onSatelliteAdded }) => {
-  const [noradId, setNoradId] = useState('');
+  const [noradId, setNoradId]   = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus]     = useState(null); // 'success' | 'error' | null
+  const [message, setMessage]   = useState('');
 
   const { getToken } = useAuth();
 
@@ -13,73 +15,122 @@ const AddSatellite = ({ onSatelliteAdded }) => {
     if (!noradId.trim()) return;
 
     setIsLoading(true);
+    setStatus(null);
+    setMessage('');
+
     try {
       const token = await getToken();
-
-      const response = await axios.post(
-        '/add-satellite', 
+      await axios.post(
+        '/add-satellite',
         { norad_id: noradId.trim() },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      console.log('Add satellite response:', response.data);
-      alert('Satellite added successfully!');
+      setStatus('success');
+      setMessage(`NORAD ${noradId.trim()} added to fleet.`);
       setNoradId('');
       if (onSatelliteAdded) onSatelliteAdded();
-    } catch (error) {
-      const msg = error.response?.data?.error || error.message || 'Unknown error';
-      console.error('Error adding satellite:', error);
-      alert('Failed to add satellite: ' + msg);
+    } catch (err) {
+      setStatus('error');
+      setMessage(err.response?.data?.error || err.message || 'Unknown error');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const isDisabled = isLoading || !noradId.trim();
+
   return (
-    <div className="w-full">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* INPUT FIELD */}
-        <div>
+    <div
+      className="w-full"
+      style={{ fontFamily: '"JetBrains Mono", "Fira Code", monospace' }}
+    >
+      <div className="space-y-3">
+
+        {/* Input */}
+        <div className="relative">
           <input
             type="text"
-            placeholder="NORAD ID (e.g. 25544)"
+            placeholder="NORAD ID  —  e.g. 25544"
             value={noradId}
-            onChange={(e) => setNoradId(e.target.value)}
-            required
-            className="w-full px-5 py-4 bg-slate-800/70 border border-cyan-800/50 rounded-xl
-                       text-cyan-100 placeholder-cyan-500/60
-                       focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400
-                       transition-all duration-300 backdrop-blur"
+            onChange={(e) => {
+              setNoradId(e.target.value);
+              setStatus(null);
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && !isDisabled && handleSubmit(e)}
+            disabled={isLoading}
+            className="w-full px-4 py-3 rounded-lg text-sm text-white outline-none transition-all font-mono"
+            style={{
+              background: 'rgba(2,6,23,0.9)',
+              border: status === 'error'
+                ? '1px solid rgba(239,68,68,0.5)'
+                : status === 'success'
+                  ? '1px solid rgba(52,211,153,0.4)'
+                  : '1px solid rgba(34,211,238,0.2)',
+              caretColor: '#22d3ee',
+            }}
+            onFocus={e => {
+              if (!status) e.target.style.border = '1px solid rgba(34,211,238,0.5)';
+            }}
+            onBlur={e => {
+              if (!status) e.target.style.border = '1px solid rgba(34,211,238,0.2)';
+            }}
           />
+
+          {/* Spinner inside input when loading */}
+          {isLoading && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <svg
+                className="animate-spin h-4 w-4"
+                style={{ color: '#22d3ee' }}
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            </div>
+          )}
         </div>
 
-        {/* SUBMIT BUTTON */}
+        {/* Submit button */}
         <button
-          type="submit"
-          disabled={isLoading || !noradId.trim()}
-          className={`w-full py-4 rounded-xl font-medium text-lg tracking-widest transition-all duration-300
-            ${isLoading || !noradId.trim()
-              ? 'bg-slate-700/60 text-cyan-600 cursor-not-allowed border border-slate-600'
-              : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/50 hover:shadow-cyan-400/70 border border-cyan-500'
-            }`}
+          onClick={handleSubmit}
+          disabled={isDisabled}
+          className="w-full py-2.5 rounded-lg text-[10px] tracking-[0.25em] uppercase font-mono font-bold transition-all"
+          style={isDisabled ? {
+            background: 'rgba(15,23,42,0.6)',
+            border: '1px solid rgba(30,41,59,0.6)',
+            color: '#1e3a5f',
+            cursor: 'not-allowed',
+          } : {
+            background: 'rgba(8,145,178,0.2)',
+            border: '1px solid rgba(34,211,238,0.35)',
+            color: '#22d3ee',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => {
+            if (!isDisabled) e.currentTarget.style.background = 'rgba(8,145,178,0.35)';
+          }}
+          onMouseLeave={e => {
+            if (!isDisabled) e.currentTarget.style.background = 'rgba(8,145,178,0.2)';
+          }}
         >
-          {isLoading ? (
-            <span className="flex items-center justify-center">
-              <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-              </svg>
-              Adding...
-            </span>
-          ) : (
-            'Add Satellite'
-          )}
+          {isLoading ? 'Fetching TLE…' : '+ Add to Fleet'}
         </button>
-      </form>
+
+        {/* Inline status message — no alert() */}
+        {status && (
+          <p
+            className="text-[9px] tracking-[0.18em] uppercase font-mono text-center pt-1"
+            style={{ color: status === 'success' ? '#34d399' : '#f87171' }}
+          >
+            {status === 'success' ? '✓ ' : '✕ '}
+            {message}
+          </p>
+        )}
+
+      </div>
     </div>
   );
 };

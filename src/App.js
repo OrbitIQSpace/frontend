@@ -4,7 +4,7 @@ import { SignedIn, SignedOut, UserButton, SignInButton } from '@clerk/clerk-reac
 import AddSatellite from './components/AddSatellite';
 import Satellites from './components/Satellites';
 import SatelliteDetails from './components/SatelliteDetails';
-import DigitalTwin from './components/DigitalTwin'; // ← NEW IMPORT
+import DigitalTwin from './components/DigitalTwin';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -20,7 +20,7 @@ function App() {
 
   return (
     <Router>
-      <AppContent 
+      <AppContent
         isAddModalOpen={isAddModalOpen}
         setIsAddModalOpen={setIsAddModalOpen}
         handleSatelliteAdded={handleSatelliteAdded}
@@ -38,11 +38,22 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
   const isLandingPage = location.pathname === '/';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+    <div
+      className="min-h-screen text-white"
+      style={{ background: '#020617' }}
+    >
 
-      {/* HEADER */}
-      <header className="fixed inset-x-0 top-0 z-[9999] border-b border-cyan-900/50 bg-black/90 backdrop-blur-2xl shadow-2xl">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
+      {/* ── HEADER ──────────────────────────────────────────────────────── */}
+      <header
+        className="fixed inset-x-0 top-0 z-[9999] backdrop-blur-2xl"
+        style={{
+          background: 'rgba(2,6,23,0.92)',
+          borderBottom: '1px solid rgba(30,41,59,0.7)',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+
+          {/* Logo */}
           <Link to="/" className="flex items-center space-x-5 group select-none">
             <div className="relative">
               <svg width="220" height="70" viewBox="0 0 220 70" className="drop-shadow-xl group-hover:drop-shadow-cyan-400/80 transition">
@@ -67,41 +78,58 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
             </div>
           </Link>
 
-          {/* RIGHT SIDE */}
-          <div className="flex items-center gap-6">
-            {/* GO TO DASHBOARD — ONLY ON LANDING PAGE WHEN LOGGED IN */}
+          {/* Right side */}
+          <div className="flex items-center gap-4">
             <SignedIn>
               {isLandingPage && (
                 <Link to="/dashboard">
-                  <button className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 rounded-lg font-medium text-white shadow-lg shadow-cyan-500/40 hover:shadow-cyan-400/60 transition-all duration-300 text-sm">
-                    Go to Dashboard
+                  <button
+                    className="px-5 py-2 rounded-lg font-medium text-sm transition-all"
+                    style={{
+                      background: 'rgba(8,145,178,0.2)',
+                      border: '1px solid rgba(34,211,238,0.3)',
+                      color: '#22d3ee',
+                    }}
+                  >
+                    Dashboard
                   </button>
                 </Link>
               )}
             </SignedIn>
 
-            {/* LOGIN — ONLY ON LANDING PAGE WHEN NOT LOGGED IN */}
             <SignedOut>
               {isLandingPage && (
                 <SignInButton mode="modal">
-                  <button className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-lg font-medium text-white shadow-lg shadow-slate-500/40 hover:shadow-slate-400/60 transition-all duration-300 text-sm">
+                  <button
+                    className="px-5 py-2 rounded-lg font-medium text-sm transition-all"
+                    style={{ background: 'rgba(30,41,59,0.6)', border: '1px solid rgba(51,65,85,0.5)', color: '#94a3b8' }}
+                  >
                     Login
                   </button>
                 </SignInButton>
               )}
             </SignedOut>
 
-            {/* ADD SATELLITE — ONLY ON DASHBOARD */}
+            {/* Add Satellite — dashboard only */}
             {showAddButton && (
               <button
                 onClick={() => setIsAddModalOpen(true)}
-                className="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 rounded-lg font-medium text-white shadow-lg shadow-cyan-500/40 hover:shadow-cyan-400/60 transition-all duration-300 text-sm"
+                className="px-5 py-2 rounded-lg font-medium text-sm transition-all"
+                style={{
+                  background: 'rgba(8,145,178,0.25)',
+                  border: '1px solid rgba(34,211,238,0.35)',
+                  color: '#22d3ee',
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: '11px',
+                  letterSpacing: '0.15em',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.4)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.25)')}
               >
-                Add Satellite
+                + Add Satellite
               </button>
             )}
 
-            {/* USER BUTTON — WHEN LOGGED IN */}
             <SignedIn>
               <UserButton afterSignOutUrl="/" />
             </SignedIn>
@@ -109,58 +137,88 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
-      <main className="relative pt-32 min-h-screen max-w-7xl mx-auto px-6 pb-20">
+      {/* ── MAIN ────────────────────────────────────────────────────────── */}
+      <main className="relative pt-28 min-h-screen max-w-7xl mx-auto px-6 pb-20">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
 
+          {/* DASHBOARD */}
           <Route path="/dashboard" element={
             <SignedIn>
-              <div className="space-y-12">
-                <div className="text-center pt-8">
-                  <h2 className="text-5xl font-bold text-cyan-300 mb-3">Satellite Fleet Overview</h2>
-                  <p className="text-cyan-500 font-mono text-lg">Live tracking • Telemetry • Command</p>
-                </div>
+              <div
+                className="pt-8 pb-20"
+                style={{ fontFamily: '"JetBrains Mono", "Fira Code", monospace' }}
+              >
 
-                <div className="mt-20">
-                  <div className="bg-slate-800/70 backdrop-blur-xl border border-cyan-900/50 rounded-2xl shadow-2xl overflow-hidden">
-                    <div className="px-8 py-6 border-b border-cyan-900/30 flex justify-between items-center">
-                      <h3 className="text-2xl font-bold text-cyan-300">Satellites</h3>
-                      <button
-                        onClick={() => setRefreshTelemetry(prev => prev + 1)}
-                        className="px-5 py-2 bg-cyan-600/80 hover:bg-cyan-500/80 text-white rounded-lg font-medium text-sm shadow-lg shadow-cyan-500/30 hover:shadow-cyan-400/50 transition-all"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                    <div className="p-6 bg-slate-900/60">
-                      <Satellites refreshKey={refreshTelemetry} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-center py-12">
-                  <p className="text-cyan-400 font-mono text-sm tracking-widest opacity-90">
-                    REAL-TIME SATELLITE COMMAND & CONTROL
+                {/* Page header */}
+                <div className="mb-12">
+                  <p
+                    className="text-[9px] tracking-[0.3em] uppercase mb-3"
+                    style={{ color: '#475569' }}
+                  >
+                    OrbitIQ · Fleet Command
                   </p>
-                  <p className="text-cyan-500 font-mono text-xs tracking-widest opacity-70 mt-2">
-                    ORBITIQ • ACTIVE • {new Date().getFullYear()}
+                  <h2
+                    className="font-black tracking-tighter uppercase italic leading-none"
+                    style={{
+                      fontSize: 'clamp(2.5rem, 5vw, 4rem)',
+                      color: 'white',
+                    }}
+                  >
+                    Satellite Fleet
+                  </h2>
+                  <p
+                    className="mt-2 text-xs tracking-[0.2em] uppercase"
+                    style={{ color: '#475569' }}
+                  >
+                    Live tracking · Telemetry · Command
                   </p>
                 </div>
+
+                {/* Satellite list — no wrapper box, just the list */}
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={() => setRefreshTelemetry(prev => prev + 1)}
+                    className="text-[9px] tracking-[0.2em] uppercase font-mono transition-colors px-3 py-1.5 rounded"
+                    style={{
+                      color: '#334155',
+                      border: '1px solid rgba(30,41,59,0.5)',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#64748b')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
+                  >
+                    ↻ Refresh
+                  </button>
+                </div>
+
+                <Satellites refreshKey={refreshTelemetry} />
+
+                {/* Footer */}
+                <div
+                  className="mt-16 pt-6 text-center"
+                  style={{ borderTop: '1px solid rgba(15,23,42,0.8)' }}
+                >
+                  <p className="text-[8px] tracking-[0.3em] uppercase"
+                    style={{ color: '#334155' }}
+                  >
+                    OrbitIQ · Real-Time Satellite Command & Control · {new Date().getFullYear()}
+                  </p>
+                </div>
+
               </div>
             </SignedIn>
           } />
 
-          {/* SATELLITE DETAILS ROUTE */}
+          {/* SATELLITE DETAILS */}
           <Route path="/satellite/:noradId" element={
             <SignedIn>
               <SatelliteDetails />
             </SignedIn>
           } />
 
-          {/* NEW DIGITAL TWIN ROUTE */}
+          {/* MISSION CONTROL (Digital Twin) */}
           <Route path="/satellite/:noradId/digital-twin" element={
             <SignedIn>
               <DigitalTwin />
@@ -169,23 +227,53 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
         </Routes>
       </main>
 
-      {/* ADD SATELLITE MODAL */}
+      {/* ── ADD SATELLITE MODAL ──────────────────────────────────────────── */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-slate-900/95 backdrop-blur-xl border border-cyan-800/50 rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold text-cyan-300">Add Satellite</h3>
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}
+          onClick={() => setIsAddModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm mx-4 rounded-2xl p-6 shadow-2xl"
+            style={{
+              background: 'rgba(2,6,23,0.98)',
+              border: '1px solid rgba(34,211,238,0.15)',
+              backdropFilter: 'blur(20px)',
+              fontFamily: '"JetBrains Mono", monospace',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div
+              className="flex justify-between items-center mb-6 pb-4"
+              style={{ borderBottom: '1px solid rgba(30,41,59,0.7)' }}
+            >
+              <div>
+                <p className="text-[8px] tracking-[0.25em] uppercase mb-1" style={{ color: '#164e63' }}>
+                  Fleet Management
+                </p>
+                <h3 className="text-sm font-bold text-white tracking-wide">Add Satellite</h3>
+              </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
-                className="text-cyan-400 hover:text-white transition text-2xl"
+                className="w-7 h-7 flex items-center justify-center rounded transition-colors"
+                style={{ color: '#334155', border: '1px solid rgba(30,41,59,0.6)' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
               >
-                X
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
               </button>
             </div>
+
             <AddSatellite onSatelliteAdded={handleSatelliteAdded} />
           </div>
         </div>
       )}
+
     </div>
   );
 };

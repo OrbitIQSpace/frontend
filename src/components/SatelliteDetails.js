@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import axios from '../api'; 
+import axios from '../api';
 import Upload from './Upload';
 import SatelliteMap from './SatelliteMap';
 import { useAuth } from '@clerk/clerk-react';
@@ -18,36 +18,144 @@ import {
 import { Line } from 'react-chartjs-2';
 
 ChartJS.register(
-  CategoryScale, 
-  LinearScale, 
-  PointElement, 
-  LineElement, 
-  Title, 
-  Tooltip, 
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
   Legend,
   Filler
 );
+
+// ── Shared chart config ───────────────────────────────────────────────────────
+const getChartOptions = (title) => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: {
+    legend: { display: false },
+    title: {
+      display: true,
+      text: title,
+      color: '#475569',
+      align: 'start',
+      font: { size: 10, weight: '600', family: '"JetBrains Mono", monospace' },
+      padding: { bottom: 16 }
+    },
+    tooltip: {
+      backgroundColor: '#020617',
+      borderColor: 'rgba(34,211,238,0.15)',
+      borderWidth: 1,
+      padding: 12,
+      cornerRadius: 6,
+      titleColor: '#94a3b8',
+      bodyColor: '#e2e8f0',
+      titleFont: { family: '"JetBrains Mono", monospace', size: 10 },
+      bodyFont: { family: '"JetBrains Mono", monospace', size: 11 },
+    }
+  },
+  scales: {
+    x: {
+      grid: { color: 'rgba(30,41,59,0.8)' },
+      ticks: { color: '#334155', font: { size: 9, family: '"JetBrains Mono", monospace' }, maxTicksLimit: 6 }
+    },
+    y: {
+      grid: { color: 'rgba(30,41,59,0.8)' },
+      ticks: { color: '#475569', font: { size: 9, family: '"JetBrains Mono", monospace' } }
+    },
+  },
+});
+
+// ── Small reusable components ─────────────────────────────────────────────────
+
+const StatCard = ({ label, value, unit, accent = 'text-white', large = false }) => (
+  <div className="flex flex-col gap-1">
+    <span
+      className="font-mono uppercase tracking-[0.2em]"
+      style={{ fontSize: '9px', color: '#334155' }}
+    >
+      {label}
+    </span>
+    <span className={`font-mono font-bold leading-none ${large ? 'text-3xl' : 'text-lg'} ${accent}`}>
+      {value ?? '—'}
+      {unit && (
+        <span className="text-xs font-normal text-slate-600 ml-1">{unit}</span>
+      )}
+    </span>
+  </div>
+);
+
+const SectionCard = ({ children, className = '' }) => (
+  <div
+    className={`rounded-2xl p-6 ${className}`}
+    style={{
+      background: 'rgba(2,6,23,0.7)',
+      border: '1px solid rgba(30,41,59,0.8)',
+      backdropFilter: 'blur(10px)',
+    }}
+  >
+    {children}
+  </div>
+);
+
+const SectionLabel = ({ children }) => (
+  <p
+    className="font-mono uppercase tracking-[0.22em] mb-5"
+    style={{ fontSize: '9px', color: '#22d3ee', opacity: 0.6 }}
+  >
+    {children}
+  </p>
+);
+
+const TabButton = ({ active, onClick, children, accent }) => {
+  const base = 'px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all font-mono';
+  if (accent) {
+    return (
+      <button
+        onClick={onClick}
+        className={`${base} text-white`}
+        style={{ background: 'rgba(124,58,237,0.7)', border: '1px solid rgba(167,139,250,0.3)' }}
+      >
+        {children}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`${base} ${
+        active
+          ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-900/30'
+          : 'text-slate-500 hover:text-slate-300'
+      }`}
+    >
+      {children}
+    </button>
+  );
+};
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 const SatelliteDetails = () => {
   const { noradId } = useParams();
   const { getToken } = useAuth();
 
-  const [satellite, setSatellite] = useState(null);
-  const [telemetry, setTelemetry] = useState([]);
+  const [satellite, setSatellite]         = useState(null);
+  const [telemetry, setTelemetry]         = useState([]);
   const [derivedHistory, setDerivedHistory] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [position, setPosition] = useState(null);
-  const [activeTab, setActiveTab] = useState('tracking'); 
+  const [isLoading, setIsLoading]         = useState(true);
+  const [error, setError]                 = useState(null);
+  const [position, setPosition]           = useState(null);
+  const [activeTab, setActiveTab]         = useState('overview');
 
-  // DATA FETCHING
+  // ── Data fetch ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       try {
         const token = await getToken();
-
         const [satRes, telRes] = await Promise.all([
           axios.get(`/api/satellite/${noradId}`, {
             headers: { Authorization: `Bearer ${token}` }
@@ -65,12 +173,11 @@ const SatelliteDetails = () => {
             headers: { Authorization: `Bearer ${token}` }
           });
           setDerivedHistory(derivedRes.data);
-        } catch (err) {
+        } catch {
           setDerivedHistory([]);
         }
       } catch (err) {
-        const msg = err.response?.data?.error || err.message || "Unknown error";
-        setError("Failed to load satellite data: " + msg);
+        setError('Failed to load satellite data: ' + (err.response?.data?.error || err.message));
       } finally {
         setIsLoading(false);
       }
@@ -78,238 +185,442 @@ const SatelliteDetails = () => {
     fetchData();
   }, [noradId, getToken]);
 
-  // LIVE TLE TRACKING
+  // ── Live TLE tracking ───────────────────────────────────────────────────────
   useEffect(() => {
     const line1 = satellite?.tle_line1?.trim();
     const line2 = satellite?.tle_line2?.trim();
-
-    if (!line1 || !line2) {
-      if (!isLoading) console.warn('TLE lines missing for:', satellite?.name);
-      setPosition(null);
-      return;
-    }
+    if (!line1 || !line2) { setPosition(null); return; }
 
     const { getSatelliteInfo } = require('tle.js');
     const tle = [line1, line2];
 
-    const updatePosition = () => {
+    const update = () => {
       try {
         const info = getSatelliteInfo(tle, Date.now());
         if (info && typeof info.lat === 'number') {
-          setPosition({
-            lat: info.lat,
-            lng: info.lng,
-            altitude: info.height || 0,
-          });
+          setPosition({ lat: info.lat, lng: info.lng, altitude: info.height || 0 });
         }
-      } catch (err) {
-        console.error('Tracking calculation error:', err);
+      } catch (e) {
+        console.error('TLE tracking error:', e);
       }
     };
 
-    updatePosition();
-    const interval = setInterval(updatePosition, 2000);
-    return () => clearInterval(interval);
+    update();
+    const id = setInterval(update, 2000);
+    return () => clearInterval(id);
   }, [satellite, isLoading]);
 
-  // ORBITAL DATA SORTING
-  const sortedHistory = useMemo(() => {
-    return [...derivedHistory].sort((a, b) => new Date(a.epoch) - new Date(b.epoch));
-  }, [derivedHistory]);
-
+  // ── Derived values ──────────────────────────────────────────────────────────
+  const sortedHistory = useMemo(
+    () => [...derivedHistory].sort((a, b) => new Date(a.epoch) - new Date(b.epoch)),
+    [derivedHistory]
+  );
   const latestDerived = sortedHistory[sortedHistory.length - 1];
 
-  // CHART CONFIGURATION
-  const getChartOptions = (title) => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { display: false },
-      title: { 
-        display: true, 
-        text: title, 
-        color: '#94a3b8', 
-        align: 'start',
-        font: { size: 12, weight: 'bold', family: 'monospace' } 
-      },
-      tooltip: { backgroundColor: '#0f172a', padding: 12, cornerRadius: 8 }
-    },
-    scales: {
-      x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 10 } } },
-      y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-    },
-  });
+  // ── Loading / error states ──────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div
+        className="pt-32 min-h-screen flex flex-col items-center justify-center gap-4"
+        style={{ background: '#020617', fontFamily: '"JetBrains Mono", monospace' }}
+      >
+        <div className="w-48 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+        <p className="text-[10px] tracking-[0.3em] text-cyan-600 uppercase animate-pulse">
+          Establishing uplink · {noradId}
+        </p>
+        <div className="w-48 h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
+      </div>
+    );
+  }
 
-  if (isLoading) return <div className="pt-32 text-center text-cyan-400 font-mono animate-pulse text-2xl tracking-tighter">ESTABLISHING UPLINK...</div>;
-  if (error) return <div className="pt-32 text-center text-red-400 font-mono text-xl">{error}</div>;
+  if (error) {
+    return (
+      <div className="pt-32 min-h-screen flex items-center justify-center" style={{ background: '#020617' }}>
+        <p className="text-red-400 font-mono text-sm">{error}</p>
+      </div>
+    );
+  }
 
+  // Orbital params for overview — only show if populated
+  const orbitType   = satellite.orbit_type   || null;
+  const inclination = satellite.inclination  ? `${parseFloat(satellite.inclination).toFixed(2)}°` : null;
+  const eccentricity = satellite.eccentricity ? parseFloat(satellite.eccentricity).toFixed(6) : null;
+  const perigee     = satellite.perigee      ? `${parseFloat(satellite.perigee).toFixed(0)} km` : null;
+  const apogee      = satellite.apogee       ? `${parseFloat(satellite.apogee).toFixed(0)} km` : null;
+  const period      = satellite.period       ? `${parseFloat(satellite.period).toFixed(1)} min` : null;
+  const velocity    = latestDerived?.velocity_kms
+    ? parseFloat(latestDerived.velocity_kms).toFixed(3)
+    : satellite.orbital_velocity_kms
+      ? parseFloat(satellite.orbital_velocity_kms).toFixed(3)
+      : null;
+
+  // ── Main render ─────────────────────────────────────────────────────────────
   return (
-    <div className="pt-24 min-h-screen bg-[#020617] text-white px-6 pb-20 selection:bg-cyan-500/30">
-      <div className="max-w-7xl mx-auto">
-        
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-10 border-b border-slate-800/60 pb-8">
+    <div
+      className="pt-24 min-h-screen pb-20 px-6"
+      style={{
+        background: '#020617',
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+        color: 'white',
+      }}
+    >
+      {/* Subtle grid texture */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(34,211,238,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.02) 1px, transparent 1px)',
+          backgroundSize: '60px 60px',
+        }}
+      />
+
+      <div className="relative z-10 max-w-7xl mx-auto">
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10 pb-8"
+          style={{ borderBottom: '1px solid rgba(30,41,59,0.7)' }}
+        >
           <div>
-            <h1 className="text-7xl font-black tracking-tighter text-white uppercase italic leading-none">
+            {/* Breadcrumb */}
+            <p className="text-[9px] tracking-[0.25em] text-slate-600 uppercase mb-3 font-mono">
+              OrbitIQ / Fleet / {noradId}
+            </p>
+            <h1
+              className="font-black tracking-tighter text-white uppercase italic leading-none"
+              style={{ fontSize: 'clamp(2.5rem, 6vw, 5rem)' }}
+            >
               {satellite.name}
             </h1>
-            <p className="mt-4 text-slate-500 font-mono text-sm">
-              NORAD ID: <span className="text-cyan-400">{noradId}</span>
-            </p>
+            <div className="flex items-center gap-4 mt-3">
+              {orbitType && (
+                <span
+                  className="text-[9px] tracking-[0.2em] uppercase font-mono px-2.5 py-1 rounded-full"
+                  style={{
+                    background: 'rgba(34,211,238,0.07)',
+                    border: '1px solid rgba(34,211,238,0.15)',
+                    color: '#22d3ee',
+                  }}
+                >
+                  {orbitType}
+                </span>
+              )}
+              <span className="text-slate-600 font-mono text-xs">
+                NORAD <span className="text-cyan-500">{noradId}</span>
+              </span>
+              {/* Live dot */}
+              <span className="flex items-center gap-1.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+                <span className="text-[9px] tracking-[0.2em] text-emerald-500 uppercase font-mono">Live</span>
+              </span>
+            </div>
           </div>
-          <Link to="/dashboard" className="px-8 py-3 bg-white text-black hover:bg-cyan-400 transition-all rounded-full font-black uppercase text-xs tracking-widest">
-            RETURN TO DASHBOARD
+
+          <Link
+            to="/dashboard"
+            className="px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all font-mono text-slate-400 hover:text-white"
+            style={{ border: '1px solid rgba(51,65,85,0.6)' }}
+          >
+            ← Dashboard
           </Link>
         </div>
 
-        {/* NAVIGATION TABS */}
-        <div className="flex flex-wrap gap-2 mb-10 bg-slate-950 p-1.5 rounded-full border border-slate-800/50 w-fit">
+        {/* ── Tabs ───────────────────────────────────────────────────────── */}
+        <div
+          className="flex flex-wrap gap-1.5 mb-10 p-1.5 rounded-full w-fit"
+          style={{ background: 'rgba(2,6,23,0.8)', border: '1px solid rgba(30,41,59,0.6)' }}
+        >
           {[
-            { id: 'tracking', label: 'Global Tracking' },
-            { id: 'history', label: 'Orbital Analysis' },
-            { id: 'telemetry', label: 'System Health' },
-            { id: 'digital-twin', label: 'Digital Twin' }
-          ].map((tab) => (
-            <button 
+            { id: 'overview',  label: 'Overview'          },
+            { id: 'analysis',  label: 'Orbital Analysis'  },
+            { id: 'health',    label: 'System Health'     },
+          ].map(tab => (
+            <TabButton
               key={tab.id}
-              onClick={() => {
-                if (tab.id === 'digital-twin') {
-                  // Navigate to dedicated Digital Twin page
-                  window.location.href = `/satellite/${noradId}/digital-twin`;
-                } else {
-                  setActiveTab(tab.id);
-                }
-              }}
-              className={`px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
-                activeTab === tab.id && tab.id !== 'digital-twin' 
-                  ? 'bg-cyan-600 text-white shadow-xl shadow-cyan-900/20' 
-                  : tab.id === 'digital-twin'
-                    ? 'bg-purple-600 text-white hover:bg-purple-500 shadow-lg shadow-purple-500/30'
-                    : 'text-slate-500 hover:text-white'
-              }`}
+              active={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
-            </button>
+            </TabButton>
           ))}
+          {/* Mission Control — navigates to dedicated page */}
+          <TabButton
+            accent
+            onClick={() => (window.location.href = `/satellite/${noradId}/digital-twin`)}
+          >
+            ⌖ Mission Control
+          </TabButton>
         </div>
 
-        {/* TAB CONTENT */}
-        {activeTab === 'tracking' && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-in fade-in duration-700">
-            <div className="lg:col-span-1 space-y-4">
-              <div className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-6 backdrop-blur-sm">
-                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6">Current Coordinates</h3>
-                <div className="space-y-6">
-                  <div><p className="text-slate-500 text-[9px] font-mono mb-1">LATITUDE</p><p className="text-3xl font-light text-white font-mono">{position?.lat.toFixed(6) || '—'}°</p></div>
-                  <div><p className="text-slate-500 text-[9px] font-mono mb-1">LONGITUDE</p><p className="text-3xl font-light text-white font-mono">{position?.lng.toFixed(6) || '—'}°</p></div>
-                  <div className="pt-4 border-t border-slate-800"><p className="text-slate-500 text-[9px] font-mono mb-1">ALTITUDE (MSL)</p><p className="text-3xl font-black text-green-400 font-mono">{position?.altitude.toFixed(2) || '—'} <span className="text-xs">KM</span></p></div>
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 1 — OVERVIEW
+            2D live map + key orbital stats merged into one view
+        ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 animate-in fade-in duration-500">
+
+            {/* Left column — live position + orbital params */}
+            <div className="lg:col-span-1 flex flex-col gap-4">
+
+              {/* Live position */}
+              <SectionCard>
+                <SectionLabel>Live Position · SGP4</SectionLabel>
+                <div className="flex flex-col gap-5">
+                  <StatCard label="Latitude"  value={position?.lat.toFixed(6)} unit="°" accent="text-white" />
+                  <StatCard label="Longitude" value={position?.lng.toFixed(6)} unit="°" accent="text-white" />
+                  <div style={{ borderTop: '1px solid rgba(30,41,59,0.7)', paddingTop: '1.25rem' }}>
+                    <StatCard label="Altitude" value={position?.altitude.toFixed(1)} unit="km" accent="text-emerald-400" large />
+                  </div>
                 </div>
-              </div>
-              <div className="bg-cyan-600 rounded-3xl p-6 shadow-2xl shadow-cyan-900/20">
-                <h3 className="text-[10px] font-black text-cyan-200 uppercase tracking-[0.2em] mb-2">Orbital Velocity</h3>
-                <p className="text-4xl font-black text-white font-mono leading-none">
-                  {parseFloat(latestDerived?.velocity_kms || 0).toFixed(3)}
-                </p>
-                <p className="text-[10px] font-bold text-cyan-200 mt-1 font-mono">KILOMETERS / SECOND</p>
-              </div>
+              </SectionCard>
+
+              {/* Velocity — highlight card */}
+              {velocity && (
+                <div
+                  className="rounded-2xl p-6"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(6,78,59,0.6) 0%, rgba(5,46,37,0.8) 100%)',
+                    border: '1px solid rgba(52,211,153,0.2)',
+                  }}
+                >
+                  <SectionLabel>Orbital Velocity</SectionLabel>
+                  <p className="text-4xl font-black text-white font-mono leading-none">{velocity}</p>
+                  <p className="text-[9px] font-bold text-emerald-500 mt-1.5 tracking-[0.2em] uppercase font-mono">
+                    km / second
+                  </p>
+                </div>
+              )}
+
+              {/* Orbital parameters — only fields that exist */}
+              {(inclination || eccentricity || perigee || apogee || period) && (
+                <SectionCard>
+                  <SectionLabel>Orbital Parameters</SectionLabel>
+                  <div className="flex flex-col gap-4">
+                    {inclination  && <StatCard label="Inclination"  value={inclination}  accent="text-slate-300" />}
+                    {eccentricity && <StatCard label="Eccentricity" value={eccentricity} accent="text-slate-300" />}
+                    {perigee      && <StatCard label="Perigee"      value={perigee}      accent="text-slate-300" />}
+                    {apogee       && <StatCard label="Apogee"       value={apogee}       accent="text-slate-300" />}
+                    {period       && <StatCard label="Period"       value={period}       accent="text-sky-400"   />}
+                  </div>
+                </SectionCard>
+              )}
             </div>
-            <div className="lg:col-span-3 h-[650px] rounded-3xl overflow-hidden border border-slate-800/80 shadow-2xl relative">
+
+            {/* Right — 2D map */}
+            <div
+              className="lg:col-span-3 rounded-2xl overflow-hidden"
+              style={{
+                height: 680,
+                border: '1px solid rgba(30,41,59,0.7)',
+                boxShadow: '0 0 40px rgba(34,211,238,0.04)',
+              }}
+            >
               {position ? (
                 <SatelliteMap position={position} satelliteName={satellite.name} />
               ) : (
-                <div className="h-full flex items-center justify-center bg-slate-900/80">
-                  <p className="text-cyan-400 text-xl">Waiting for TLE data...</p>
+                <div className="h-full flex items-center justify-center" style={{ background: 'rgba(2,6,23,0.9)' }}>
+                  <p className="text-[10px] tracking-[0.25em] text-cyan-700 uppercase font-mono animate-pulse">
+                    Awaiting position fix…
+                  </p>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* TAB 2: ORBITAL ANALYSIS */}
-        {activeTab === 'history' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in zoom-in-95 duration-500">
-            {/* Apogee vs Perigee Chart */}
-            <div className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-8 h-[400px]">
-              <Line 
-                options={getChartOptions('ORBITAL ENVELOPE: APOGEE VS PERIGEE (KM)')}
-                data={{
-                  labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                  datasets: [
-                    { label: 'Apogee', data: sortedHistory.map(d => d.apogee_km), borderColor: '#f43f5e', borderWidth: 2, pointRadius: 0, tension: 0.3 },
-                    { label: 'Perigee', data: sortedHistory.map(d => d.perigee_km), borderColor: '#10b981', borderWidth: 2, pointRadius: 0, tension: 0.3 }
-                  ]
-                }}
-              />
-            </div>
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 2 — ORBITAL ANALYSIS
+            TLE history charts — apogee/perigee, eccentricity, inclination, decay
+        ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'analysis' && (
+          <div className="animate-in fade-in duration-500">
 
-            {/* Eccentricity Chart */}
-            <div className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-8 h-[400px]">
-              <Line 
-                options={getChartOptions('ECCENTRICITY (ORBITAL ROUNDNESS)')}
-                data={{
-                  labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                  datasets: [{ 
-                    label: 'Eccentricity', 
-                    data: sortedHistory.map(d => d.eccentricity), 
-                    borderColor: '#f59e0b', 
-                    backgroundColor: 'rgba(245, 158, 11, 0.05)',
-                    fill: true,
-                    borderWidth: 2,
-                    pointRadius: 2
-                  }]
-                }}
-              />
-            </div>
+            {sortedHistory.length === 0 ? (
+              <SectionCard className="text-center py-20">
+                <p className="text-[10px] tracking-[0.25em] text-slate-600 uppercase font-mono">
+                  No orbital history recorded yet.
+                </p>
+                <p className="text-xs text-slate-700 mt-2 font-mono">
+                  Data accumulates automatically as TLE epochs are ingested.
+                </p>
+              </SectionCard>
+            ) : (
+              <>
+                {/* Summary strip — latest derived values */}
+                {latestDerived && (
+                  <div
+                    className="rounded-2xl p-5 mb-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-5"
+                    style={{
+                      background: 'rgba(2,6,23,0.7)',
+                      border: '1px solid rgba(30,41,59,0.8)',
+                    }}
+                  >
+                    <StatCard label="Epoch"       value={new Date(latestDerived.epoch).toLocaleDateString()} accent="text-cyan-300" />
+                    <StatCard label="Inclination" value={`${parseFloat(latestDerived.inclination).toFixed(3)}°`} accent="text-slate-300" />
+                    <StatCard label="Eccentricity" value={parseFloat(latestDerived.eccentricity).toFixed(7)} accent="text-slate-300" />
+                    <StatCard label="Perigee"     value={`${parseFloat(latestDerived.perigee_km).toFixed(0)} km`} accent="text-emerald-400" />
+                    <StatCard label="Apogee"      value={`${parseFloat(latestDerived.apogee_km).toFixed(0)} km`} accent="text-rose-400" />
+                    <StatCard label="Period"      value={`${parseFloat(latestDerived.orbital_period_minutes).toFixed(1)} min`} accent="text-sky-400" />
+                    <StatCard label="Velocity"    value={`${parseFloat(latestDerived.velocity_kms).toFixed(3)} km/s`} accent="text-yellow-400" />
+                  </div>
+                )}
 
-            {/* Inclination Chart */}
-            <div className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-8 h-[350px]">
-              <Line 
-                options={getChartOptions('INCLINATION TREND (°) ')}
-                data={{
-                  labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                  datasets: [{ label: 'Inclination', data: sortedHistory.map(d => d.inclination), borderColor: '#8b5cf6', borderWidth: 2, tension: 0.4 }]
-                }}
-              />
-            </div>
+                {/* Charts grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-            {/* Decay / Drag Chart */}
-            <div className="bg-slate-900/40 border border-slate-800/50 rounded-3xl p-8 h-[350px]">
-              <Line 
-                options={getChartOptions('ORBITAL DECAY (MEAN MOTION DOT)')}
-                data={{
-                  labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                  datasets: [{ label: 'Decay', data: sortedHistory.map(d => d.mean_motion_dot), borderColor: '#ef4444', borderWidth: 2, tension: 0.4 }]
-                }}
-              />
-            </div>
+                  {/* Apogee vs Perigee */}
+                  <SectionCard>
+                    <div style={{ height: 320 }}>
+                      <Line
+                        options={getChartOptions('ORBITAL ENVELOPE — APOGEE VS PERIGEE (KM)')}
+                        data={{
+                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
+                          datasets: [
+                            {
+                              label: 'Apogee',
+                              data: sortedHistory.map(d => d.apogee_km),
+                              borderColor: '#f43f5e',
+                              borderWidth: 1.5,
+                              pointRadius: 0,
+                              tension: 0.3,
+                            },
+                            {
+                              label: 'Perigee',
+                              data: sortedHistory.map(d => d.perigee_km),
+                              borderColor: '#10b981',
+                              borderWidth: 1.5,
+                              pointRadius: 0,
+                              tension: 0.3,
+                            },
+                          ],
+                        }}
+                      />
+                    </div>
+                  </SectionCard>
+
+                  {/* Eccentricity */}
+                  <SectionCard>
+                    <div style={{ height: 320 }}>
+                      <Line
+                        options={getChartOptions('ECCENTRICITY TREND')}
+                        data={{
+                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
+                          datasets: [{
+                            label: 'Eccentricity',
+                            data: sortedHistory.map(d => d.eccentricity),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245,158,11,0.04)',
+                            fill: true,
+                            borderWidth: 1.5,
+                            pointRadius: 2,
+                            pointBackgroundColor: '#f59e0b',
+                          }],
+                        }}
+                      />
+                    </div>
+                  </SectionCard>
+
+                  {/* Inclination */}
+                  <SectionCard>
+                    <div style={{ height: 280 }}>
+                      <Line
+                        options={getChartOptions('INCLINATION (°)')}
+                        data={{
+                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
+                          datasets: [{
+                            label: 'Inclination',
+                            data: sortedHistory.map(d => d.inclination),
+                            borderColor: '#8b5cf6',
+                            borderWidth: 1.5,
+                            tension: 0.4,
+                            pointRadius: 0,
+                          }],
+                        }}
+                      />
+                    </div>
+                  </SectionCard>
+
+                  {/* Orbital decay */}
+                  <SectionCard>
+                    <div style={{ height: 280 }}>
+                      <Line
+                        options={getChartOptions('ORBITAL DECAY — MEAN MOTION DOT')}
+                        data={{
+                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
+                          datasets: [{
+                            label: 'Decay',
+                            data: sortedHistory.map(d => d.mean_motion_dot),
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239,68,68,0.04)',
+                            fill: true,
+                            borderWidth: 1.5,
+                            tension: 0.4,
+                            pointRadius: 0,
+                          }],
+                        }}
+                      />
+                    </div>
+                  </SectionCard>
+
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {/* TAB 3: TELEMETRY & SYSTEM HEALTH */}
-        {activeTab === 'telemetry' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-in slide-in-from-right-8 duration-500">
-             <div className="md:col-span-1 bg-slate-900/40 border border-slate-800/50 rounded-3xl p-8">
-               <h3 className="text-lg font-bold mb-2 uppercase tracking-tight text-cyan-400">Manual Telemetry Uplink</h3>
-               <p className="text-slate-500 text-xs mb-8">Upload .CSV telemetry packets for processing.</p>
-               <Upload noradId={noradId} onUploadSuccess={() => {}} />
-             </div>
-             <div className="md:col-span-2 bg-slate-900/40 border border-slate-800/50 rounded-3xl p-8 h-[500px]">
-               <Line 
-                options={getChartOptions('BATTERY POWER BUS (PERCENTAGE)')}
-                data={{
-                  labels: telemetry.slice().reverse().map(t => new Date(t.timestamp).toLocaleTimeString()),
-                  datasets: [{ 
-                    label: 'Battery %', 
-                    data: telemetry.slice().reverse().map(t => t.battery_level), 
-                    borderColor: '#06b6d4',
-                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    borderWidth: 3
-                  }]
-               }} />
-             </div>
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 3 — SYSTEM HEALTH
+            Manual CSV telemetry uplink + battery chart
+        ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'health' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 animate-in fade-in duration-500">
+
+            {/* Upload panel */}
+            <SectionCard className="md:col-span-1">
+              <SectionLabel>Manual Telemetry Uplink</SectionLabel>
+              <p className="text-[10px] text-slate-600 mb-6 leading-relaxed font-mono">
+                Upload a .CSV packet to log battery and fuel telemetry for this satellite.
+              </p>
+              <Upload noradId={noradId} onUploadSuccess={() => {}} />
+            </SectionCard>
+
+            {/* Battery chart */}
+            <SectionCard className="md:col-span-2">
+              {telemetry.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center py-20 gap-3">
+                  <p className="text-[10px] tracking-[0.25em] text-slate-600 uppercase font-mono">
+                    No telemetry packets on record.
+                  </p>
+                  <p className="text-xs text-slate-700 font-mono">
+                    Upload a CSV file to populate this chart.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ height: 440 }}>
+                  <Line
+                    options={getChartOptions('BATTERY POWER BUS (%)')}
+                    data={{
+                      labels: telemetry.slice().reverse().map(t =>
+                        new Date(t.timestamp).toLocaleTimeString()
+                      ),
+                      datasets: [{
+                        label: 'Battery %',
+                        data: telemetry.slice().reverse().map(t => t.battery_level),
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6,182,212,0.06)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                      }],
+                    }}
+                  />
+                </div>
+              )}
+            </SectionCard>
+
           </div>
         )}
 
