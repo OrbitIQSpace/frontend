@@ -149,8 +149,8 @@ const DigitalTwin = () => {
   // View mode: '3d' | '2d'
   const [viewMode, setViewMode]               = useState('3d');
 
-  // Track source data for the Cesium entities drawn imperatively
-  const [trackEntities, setTrackEntities]     = useState([]);
+  // Ref to track ground track entities drawn imperatively into the Cesium viewer
+  const trackEntitiesRef = useRef([]);
 
   const viewerRef        = useRef(null);
   const bordersLoadedRef = useRef(false);
@@ -249,10 +249,8 @@ const DigitalTwin = () => {
     const futureSegments = splitAtAntimeridian(futurePositions);
 
     // Remove any previous track entities
-    setTrackEntities(prev => {
-      prev.forEach(e => { try { viewer.entities.remove(e); } catch {} });
-      return [];
-    });
+    trackEntitiesRef.current.forEach(e => { try { viewer.entities.remove(e); } catch {} });
+    trackEntitiesRef.current = [];
 
     const added = [];
 
@@ -295,7 +293,7 @@ const DigitalTwin = () => {
       added.push(e);
     });
 
-    setTrackEntities(added);
+    trackEntitiesRef.current = added;
   }, [tle]);
 
   // ── Trigger initial draw + 60 s redraw interval ───────────────────────────
