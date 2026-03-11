@@ -955,28 +955,55 @@ const ManeuverSandbox = () => {
               <DataRow label="Orig. Period" value={simResult.metrics.originalPeriodMin} unit="min" dim />
 
               <div style={{ height: 1, background: 'rgba(30,41,59,0.6)' }} />
-              <DataRow label="Fuel Cost" value="—" dim />
-              <p className="text-[7px] font-mono" style={{ color: '#1e3a5f' }}>
-                Add spacecraft mass + Isp to enable fuel calculation
-              </p>
+              {(() => {
+                const { wet_mass_kg, isp_s, thrust_n } = satellite || {};
+                if (wet_mass_kg && isp_s) {
+                  const G0 = 9.80665;
+                  const dv = simResult.metrics.dvMs;
+                  const fuelKg = parseFloat(wet_mass_kg) * (1 - Math.exp(-dv / (parseFloat(isp_s) * G0)));
+                  const massFlowKgs = thrust_n ? parseFloat(thrust_n) / (parseFloat(isp_s) * G0) : null;
+                  const burnSec = massFlowKgs ? fuelKg / massFlowKgs : null;
+                  return (
+                    <>
+                      <DataRow label="Fuel Cost" value={fuelKg.toFixed(3)} unit="kg" accent="#fbbf24" />
+                      {burnSec != null && (
+                        <DataRow label="Burn Duration" value={burnSec.toFixed(1)} unit="s" accent="#fbbf24" />
+                      )}
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <DataRow label="Fuel Cost" value="—" dim />
+                    <p className="text-[7px] font-mono" style={{ color: '#1e3a5f' }}>
+                      Add spacecraft params to enable fuel calculation
+                    </p>
+                  </>
+                );
+              })()}
             </div>
           ) : null}
         </div>
 
-        {/* Spacecraft params placeholder */}
+        {/* Spacecraft params */}
         <div className="rounded-lg px-3 py-3" style={{
           background: 'rgba(2,6,23,0.6)',
-          border: '1px dashed rgba(30,41,59,0.5)',
+          border: satellite?.wet_mass_kg
+            ? '1px solid rgba(34,211,238,0.15)'
+            : '1px dashed rgba(30,41,59,0.5)',
           backdropFilter: 'blur(12px)',
         }}>
           <PanelTitle>Spacecraft Params</PanelTitle>
           <div className="flex flex-col gap-2">
-            {['Wet Mass', 'Dry Mass', 'Isp'].map(p => (
-              <DataRow key={p} label={p} value="—" dim />
-            ))}
-            <p className="text-[7px] font-mono mt-1" style={{ color: '#1e3a5f' }}>
-              Coming next sprint — enables Tsiolkovsky fuel calculations
-            </p>
+            <DataRow label="Wet Mass" value={satellite?.wet_mass_kg  ?? '—'} unit={satellite?.wet_mass_kg  ? 'kg' : ''} dim={!satellite?.wet_mass_kg} />
+            <DataRow label="Dry Mass" value={satellite?.dry_mass_kg  ?? '—'} unit={satellite?.dry_mass_kg  ? 'kg' : ''} dim={!satellite?.dry_mass_kg} />
+            <DataRow label="Isp"      value={satellite?.isp_s        ?? '—'} unit={satellite?.isp_s        ? 's'  : ''} dim={!satellite?.isp_s} />
+            <DataRow label="Thrust"   value={satellite?.thrust_n     ?? '—'} unit={satellite?.thrust_n     ? 'N'  : ''} dim={!satellite?.thrust_n} />
+            {!satellite?.wet_mass_kg && (
+              <p className="text-[7px] font-mono mt-1" style={{ color: '#1e3a5f' }}>
+                Set params in Satellite Details → Spacecraft tab
+              </p>
+            )}
           </div>
         </div>
 

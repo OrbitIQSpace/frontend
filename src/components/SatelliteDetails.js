@@ -149,6 +149,12 @@ const SatelliteDetails = () => {
   const [position, setPosition]           = useState(null);
   const [activeTab, setActiveTab]         = useState('overview');
 
+  // ── Spacecraft params form state ─────────────────────────────────────────
+  const [scParams, setScParams] = useState({ wet_mass_kg: '', dry_mass_kg: '', isp_s: '', thrust_n: '' });
+  const [scSaving, setScSaving] = useState(false);
+  const [scSaved,  setScSaved]  = useState(false);
+  const [scError,  setScError]  = useState(null);
+
   // ── Data fetch ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
@@ -167,6 +173,15 @@ const SatelliteDetails = () => {
 
         setSatellite(satRes.data);
         setTelemetry(telRes.data);
+
+        // Pre-populate spacecraft params form from saved values
+        const s = satRes.data;
+        setScParams({
+          wet_mass_kg: s.wet_mass_kg ?? '',
+          dry_mass_kg: s.dry_mass_kg ?? '',
+          isp_s:       s.isp_s       ?? '',
+          thrust_n:    s.thrust_n    ?? '',
+        });
 
         try {
           const derivedRes = await axios.get(`/api/tle_derived/${noradId}`, {
@@ -216,6 +231,26 @@ const SatelliteDetails = () => {
     [derivedHistory]
   );
   const latestDerived = sortedHistory[sortedHistory.length - 1];
+
+  // ── Save spacecraft params ───────────────────────────────────────────────
+  const saveScParams = async () => {
+    setScSaving(true);
+    setScError(null);
+    setScSaved(false);
+    try {
+      const token = await getToken();
+      await axios.patch(`/api/satellite/${noradId}/spacecraft-params`, scParams, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setSatellite(prev => ({ ...prev, ...scParams }));
+      setScSaved(true);
+      setTimeout(() => setScSaved(false), 3000);
+    } catch (err) {
+      setScError(err.response?.data?.error || 'Save failed');
+    } finally {
+      setScSaving(false);
+    }
+  };
 
   // ── Loading / error states ──────────────────────────────────────────────────
   if (isLoading) {
@@ -333,9 +368,10 @@ const SatelliteDetails = () => {
           style={{ background: 'rgba(2,6,23,0.8)', border: '1px solid rgba(30,41,59,0.6)' }}
         >
           {[
-            { id: 'overview',  label: 'Overview'          },
-            { id: 'analysis',  label: 'Orbital Analysis'  },
-            { id: 'health',    label: 'System Health'     },
+            { id: 'overview',    label: 'Overview'          },
+            { id: 'analysis',    label: 'Orbital Analysis'  },
+            { id: 'health',      label: 'System Health'     },
+            { id: 'spacecraft',  label: 'Spacecraft'        },
           ].map(tab => (
             <TabButton
               key={tab.id}
@@ -571,7 +607,100 @@ const SatelliteDetails = () => {
         )}
 
         {/* ══════════════════════════════════════════════════════════════════
-            TAB 3 — SYSTEM HEALTH
+            TAB 3 — SPACECRAFT PARAMS
+            Propulsion parameters for Tsiolkovsky fuel cost calculations
+        ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'spacecraft' && (
+          <div className="max-w-lg animate-in fade-in duration-500">
+            <SectionCard>
+              <SectionLabel>Spacecraft · Propulsion Parameters</SectionLabel>
+              <p className="text-[10px] text-slate-600 mb-8 leading-relaxed font-mono">
+                Enter your spacecraft's propulsion specs. These are used to calculate fuel cost
+                and burn duration in the Maneuver Sandbox.
+              </p>
+
+              <div className="flex flex-col gap-6">
+                {[
+                  { key: 'wet_mass_kg', label: 'Wet Mass',  unit: 'kg',  hint: 'Total mass including propellant'   },
+                  { key: 'dry_mass_kg', label: 'Dry Mass',  unit: 'kg',  hint: 'Mass without propellant'           },
+                  { key: 'isp_s',       label: 'Isp',       unit: 's',   hint: 'Specific impulse of your thruster' },
+                  { key: 'thrust_n',    label: 'Thrust',    unit: 'N',   hint: 'Thruster output force'             },
+                ].map(({ key, label, unit, hint }) => (
+                  <div key={key} className="flex flex-col gap-1.5">
+                    <div className="flex items-baseline justify-between">
+                      <label
+                        className="font-mono uppercase tracking-[0.2em]"
+                        style={{ fontSize: '9px', color: '#22d3ee', opacity: 0.7 }}
+                      >
+                        {label} <span style={{ color: '#334155' }}>({unit})</span>
+                      </label>
+                      <span className="font-mono" style={{ fontSize: '9px', color: '#1e3a5f' }}>{hint}</span>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={scParams[key]}
+                      onChange={e => setScParams(prev => ({ ...prev, [key]: e.target.value }))}
+                      placeholder="—"
+                      className="w-full bg-transparent font-mono text-sm text-white placeholder-slate-700 px-3 py-2.5 rounded-lg"
+                      style={{
+                        border: '1px solid rgba(30,41,59,0.8)',
+                        outline: 'none',
+                      }}
+                      onFocus={e => { e.target.style.borderColor = 'rgba(34,211,238,0.4)'; }}
+                      onBlur={e  => { e.target.style.borderColor = 'rgba(30,41,59,0.8)';   }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Derived preview — fuel available */}
+              {scParams.wet_mass_kg && scParams.dry_mass_kg && (
+                <div
+                  className="mt-6 px-4 py-3 rounded-lg"
+                  style={{ background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.1)' }}
+                >
+                  <p className="font-mono uppercase tracking-[0.2em] mb-1" style={{ fontSize: '9px', color: '#334155' }}>
+                    Propellant Available
+                  </p>
+                  <p className="font-mono font-bold text-lg text-white">
+                    {(parseFloat(scParams.wet_mass_kg) - parseFloat(scParams.dry_mass_kg)).toFixed(1)}
+                    <span className="text-xs font-normal text-slate-600 ml-1">kg</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Save button + feedback */}
+              <div className="mt-8 flex items-center gap-4">
+                <button
+                  onClick={saveScParams}
+                  disabled={scSaving}
+                  className="px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest font-mono transition-all"
+                  style={{
+                    background: scSaving ? 'rgba(34,211,238,0.05)' : 'rgba(34,211,238,0.15)',
+                    border: '1px solid rgba(34,211,238,0.35)',
+                    color: '#22d3ee',
+                    opacity: scSaving ? 0.5 : 1,
+                  }}
+                >
+                  {scSaving ? 'Saving…' : 'Save Parameters'}
+                </button>
+                {scSaved && (
+                  <span className="font-mono text-[10px] tracking-[0.15em] text-emerald-400 uppercase">
+                    ✓ Saved
+                  </span>
+                )}
+                {scError && (
+                  <span className="font-mono text-[10px] text-red-400">{scError}</span>
+                )}
+              </div>
+            </SectionCard>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB 4 — SYSTEM HEALTH
             Manual CSV telemetry uplink + battery chart
         ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'health' && (
