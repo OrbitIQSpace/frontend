@@ -30,7 +30,6 @@ export const isSatVisible = (stationLat, stationLng, satLat, satLng, satHeightM,
 
   const r  = Re + satHeightM;
   // Ground range between station and satellite subpoint
-  const d  = Re * centralAngle;
   // Elevation angle from station to satellite
   const elevRad = Math.atan2(
     r * Math.cos(centralAngle) - Re,
@@ -73,7 +72,6 @@ const useGroundStations = (viewerRef, currentSatPosition) => {
   const [stations, setStations] = useState([]);
   const [loading, setLoading]   = useState(true);
   const stationEntitiesRef      = useRef([]);
-  const lastDrawnRef            = useRef({ stationsHash: '', visible: null });
 
   // ── Fetch stations ────────────────────────────────────────────────────
   useEffect(() => {

@@ -114,17 +114,6 @@ const simulateManeuver = (tle, burnTimeMs, dvMs, direction) => {
   const radUnit    = getRadialVector(tle, burnTimeMs);
   if (!velUnit || !radUnit) return null;
 
-  // Build the ΔV vector in ECI based on burn direction
-  let dvVec;
-  if (direction === 'prograde') {
-    dvVec = Cesium.Cartesian3.multiplyByScalar(velUnit, dvMs, new Cesium.Cartesian3());
-  } else if (direction === 'retrograde') {
-    dvVec = Cesium.Cartesian3.multiplyByScalar(velUnit, -dvMs, new Cesium.Cartesian3());
-  } else if (direction === 'radial+') {
-    dvVec = Cesium.Cartesian3.multiplyByScalar(radUnit, dvMs, new Cesium.Cartesian3());
-  } else { // radial-
-    dvVec = Cesium.Cartesian3.multiplyByScalar(radUnit, -dvMs, new Cesium.Cartesian3());
-  }
 
   // For each point in the post-burn ground track, offset the height
   // proportionally to simulate the new orbit shape.
@@ -323,7 +312,6 @@ const ManeuverSandbox = () => {
   const simTrackRef        = useRef([]);
   const burnMarkerRef      = useRef(null);
   const hasAutoCenteredRef = useRef(false);
-  const mountTimeRef       = useRef(Date.now());
 
   // ── Ground stations ───────────────────────────────────────────────────────
   const { stations } = useGroundStations(viewerRef, currentPosition);
@@ -594,7 +582,7 @@ const ManeuverSandbox = () => {
 
       setIsSimulating(false);
     }, 300); // small delay for the "calculating" feel
-  }, [tle, burnTimeMin, dvMs, direction, drawCurrentTrack]);
+  }, [tle, burnTimeMin, dvMs, direction, drawCurrentTrack, stations]);
 
   // ── Clear simulation ───────────────────────────────────────────────────────
   const handleClear = useCallback(() => {

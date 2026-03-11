@@ -8,8 +8,6 @@ import { useAuth } from '@clerk/clerk-react';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const pad = (n) => String(n).padStart(2, '0');
-
 // Compute great-circle footprint radius in km for a given satellite altitude
 // and elevation mask angle. This is the max slant-range projected to ground.
 // rho = arccos(Re / (Re + h)) - elev_mask (in radians)
