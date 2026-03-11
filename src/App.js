@@ -6,6 +6,7 @@ import Satellites from './components/Satellites';
 import SatelliteDetails from './components/SatelliteDetails';
 import DigitalTwin from './components/DigitalTwin';
 import ManeuverSandbox from './components/ManeuverSandbox';
+import ReboostPlanner from './components/ReboostPlanner';
 import GroundStations from './pages/GroundStations';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -53,12 +54,12 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
           borderBottom: '1px solid rgba(30,41,59,0.7)',
         }}
       >
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-6 py-2 flex justify-between items-center">
 
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-5 group select-none">
             <div className="relative">
-              <svg width="220" height="70" viewBox="0 0 220 70" className="drop-shadow-xl group-hover:drop-shadow-cyan-400/80 transition">
+              <svg width="160" height="50" viewBox="0 0 220 70" className="drop-shadow-xl group-hover:drop-shadow-cyan-400/80 transition">
                 <path d="M 28 38 Q 50 -4 92 20" fill="none" stroke="#06b6d4" strokeWidth="3" opacity="0.7"/>
                 <defs>
                   <linearGradient id="trail" x1="0%" y1="100%" x2="100%" y2="0%">
@@ -248,6 +249,13 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
           <Route path="/satellite/:noradId/maneuver" element={
             <SignedIn>
               <ManeuverSandbox />
+            </SignedIn>
+          } />
+
+          {/* REBOOST PLANNER */}
+          <Route path="/satellite/:noradId/reboost" element={
+            <SignedIn>
+              <ReboostPlanner />
             </SignedIn>
           } />
 

@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from '../api';
 import Upload from './Upload';
-import SatelliteMap from './SatelliteMap';
 import { useAuth } from '@clerk/clerk-react';
 import {
   Chart as ChartJS,
@@ -108,48 +107,20 @@ const SectionLabel = ({ children }) => (
   </p>
 );
 
-const TabButton = ({ active, onClick, children, accent }) => {
-  const base = 'px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all font-mono';
-  if (accent) {
-    return (
-      <button
-        onClick={onClick}
-        className={`${base} text-white`}
-        style={{ background: 'rgba(124,58,237,0.7)', border: '1px solid rgba(167,139,250,0.3)' }}
-      >
-        {children}
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={onClick}
-      className={`${base} ${
-        active
-          ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-900/30'
-          : 'text-slate-500 hover:text-slate-300'
-      }`}
-    >
-      {children}
-    </button>
-  );
-};
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 const SatelliteDetails = () => {
   const { noradId } = useParams();
   const { getToken } = useAuth();
 
-  const [satellite, setSatellite]         = useState(null);
-  const [telemetry, setTelemetry]         = useState([]);
+  const [satellite, setSatellite]           = useState(null);
+  const [telemetry, setTelemetry]           = useState([]);
   const [derivedHistory, setDerivedHistory] = useState([]);
-  const [isLoading, setIsLoading]         = useState(true);
-  const [error, setError]                 = useState(null);
-  const [position, setPosition]           = useState(null);
-  const [activeTab, setActiveTab]         = useState('overview');
+  const [isLoading, setIsLoading]           = useState(true);
+  const [error, setError]                   = useState(null);
+  const [position, setPosition]             = useState(null);
 
-  // ── Spacecraft params form state ─────────────────────────────────────────
+  // ── Spacecraft params form state ──────────────────────────────────────────
   const [scParams, setScParams] = useState({ wet_mass_kg: '', dry_mass_kg: '', isp_s: '', thrust_n: '' });
   const [scSaving, setScSaving] = useState(false);
   const [scSaved,  setScSaved]  = useState(false);
@@ -174,7 +145,6 @@ const SatelliteDetails = () => {
         setSatellite(satRes.data);
         setTelemetry(telRes.data);
 
-        // Pre-populate spacecraft params form from saved values
         const s = satRes.data;
         setScParams({
           wet_mass_kg: s.wet_mass_kg ?? '',
@@ -276,18 +246,25 @@ const SatelliteDetails = () => {
     );
   }
 
-  // Orbital params for overview — only show if populated
-  const orbitType   = satellite.orbit_type   || null;
-  const inclination = satellite.inclination  ? `${parseFloat(satellite.inclination).toFixed(2)}°` : null;
-  const eccentricity = satellite.eccentricity ? parseFloat(satellite.eccentricity).toFixed(6) : null;
-  const perigee     = satellite.perigee      ? `${parseFloat(satellite.perigee).toFixed(0)} km` : null;
-  const apogee      = satellite.apogee       ? `${parseFloat(satellite.apogee).toFixed(0)} km` : null;
-  const period      = satellite.period       ? `${parseFloat(satellite.period).toFixed(1)} min` : null;
-  const velocity    = latestDerived?.velocity_kms
+  // Computed values — prefer latestDerived, fallback to satellite record
+  const orbitType    = satellite.orbit_type   || null;
+  const altKm        = position ? position.altitude.toFixed(1) : (satellite.altitude ? parseFloat(satellite.altitude).toFixed(1) : null);
+  const inclination  = latestDerived?.inclination  ? `${parseFloat(latestDerived.inclination).toFixed(2)}`  : satellite.inclination  ? `${parseFloat(satellite.inclination).toFixed(2)}`  : null;
+  const eccentricity = latestDerived?.eccentricity ? parseFloat(latestDerived.eccentricity).toFixed(6)      : satellite.eccentricity ? parseFloat(satellite.eccentricity).toFixed(6)      : null;
+  const perigee      = latestDerived?.perigee_km   ? parseFloat(latestDerived.perigee_km).toFixed(0)        : satellite.perigee      ? parseFloat(satellite.perigee).toFixed(0)            : null;
+  const apogee       = latestDerived?.apogee_km    ? parseFloat(latestDerived.apogee_km).toFixed(0)         : satellite.apogee       ? parseFloat(satellite.apogee).toFixed(0)             : null;
+  const period       = latestDerived?.orbital_period_minutes ? parseFloat(latestDerived.orbital_period_minutes).toFixed(1) : satellite.period ? parseFloat(satellite.period).toFixed(1) : null;
+  const velocity     = latestDerived?.velocity_kms
     ? parseFloat(latestDerived.velocity_kms).toFixed(3)
     : satellite.orbital_velocity_kms
       ? parseFloat(satellite.orbital_velocity_kms).toFixed(3)
       : null;
+
+  const propellantAvail = scParams.wet_mass_kg && scParams.dry_mass_kg
+    ? (parseFloat(scParams.wet_mass_kg) - parseFloat(scParams.dry_mass_kg)).toFixed(1)
+    : null;
+
+  const chartLabels = sortedHistory.map(d => new Date(d.epoch).toLocaleDateString());
 
   // ── Main render ─────────────────────────────────────────────────────────────
   return (
@@ -312,11 +289,10 @@ const SatelliteDetails = () => {
       <div className="relative z-10 max-w-7xl mx-auto">
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10 pb-8"
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8 pb-8"
           style={{ borderBottom: '1px solid rgba(30,41,59,0.7)' }}
         >
           <div>
-            {/* Breadcrumb */}
             <p className="text-[9px] tracking-[0.25em] text-slate-600 uppercase mb-3 font-mono">
               OrbitIQ / Fleet / {noradId}
             </p>
@@ -342,7 +318,6 @@ const SatelliteDetails = () => {
               <span className="text-slate-600 font-mono text-xs">
                 NORAD <span className="text-cyan-500">{noradId}</span>
               </span>
-              {/* Live dot */}
               <span className="flex items-center gap-1.5">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -362,119 +337,159 @@ const SatelliteDetails = () => {
           </Link>
         </div>
 
-        {/* ── Tabs ───────────────────────────────────────────────────────── */}
-        <div
-          className="flex flex-wrap gap-1.5 mb-10 p-1.5 rounded-full w-fit"
-          style={{ background: 'rgba(2,6,23,0.8)', border: '1px solid rgba(30,41,59,0.6)' }}
-        >
-          {[
-            { id: 'overview',    label: 'Overview'          },
-            { id: 'analysis',    label: 'Orbital Analysis'  },
-            { id: 'health',      label: 'System Health'     },
-            { id: 'spacecraft',  label: 'Spacecraft'        },
-          ].map(tab => (
-            <TabButton
-              key={tab.id}
-              active={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </TabButton>
-          ))}
-          {/* Mission Control — navigates to dedicated page */}
-          <TabButton
-            accent
+        {/* ── Action Bar ─────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap gap-3 mb-8">
+          <button
             onClick={() => (window.location.href = `/satellite/${noradId}/digital-twin`)}
+            className="flex-1 min-w-[180px] px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all font-mono text-white flex items-center justify-center gap-2"
+            style={{ background: 'rgba(124,58,237,0.5)', border: '1px solid rgba(167,139,250,0.3)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,0.75)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(124,58,237,0.5)')}
           >
-            ⌖ Mission Control
-          </TabButton>
+            <span style={{ fontSize: '16px' }}>⌖</span> Mission Control
+          </button>
+          <button
+            onClick={() => (window.location.href = `/satellite/${noradId}/reboost`)}
+            className="flex-1 min-w-[180px] px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all font-mono text-white flex items-center justify-center gap-2"
+            style={{ background: 'rgba(194,65,12,0.5)', border: '1px solid rgba(249,115,22,0.35)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(194,65,12,0.75)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(194,65,12,0.5)')}
+          >
+            <span style={{ fontSize: '16px' }}>↑</span> Reboost Planner
+          </button>
+          <button
+            onClick={() => (window.location.href = `/satellite/${noradId}/maneuver`)}
+            className="flex-1 min-w-[180px] px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all font-mono text-white flex items-center justify-center gap-2"
+            style={{ background: 'rgba(8,145,178,0.25)', border: '1px solid rgba(34,211,238,0.35)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.45)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.25)')}
+          >
+            <span style={{ fontSize: '16px' }}>◎</span> Maneuver Sandbox
+          </button>
         </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB 1 — OVERVIEW
-            2D live map + key orbital stats merged into one view
-        ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 animate-in fade-in duration-500">
+        {/* ── Stats Strip ────────────────────────────────────────────────── */}
+        <div
+          className="rounded-2xl p-5 mb-8 grid grid-cols-3 md:grid-cols-6 gap-5"
+          style={{
+            background: 'rgba(2,6,23,0.7)',
+            border: '1px solid rgba(30,41,59,0.8)',
+          }}
+        >
+          <StatCard label="Altitude"    value={altKm}        unit="km"  accent="text-emerald-400" />
+          <StatCard label="Period"      value={period}        unit="min" accent="text-sky-400"     />
+          <StatCard label="Inclination" value={inclination}   unit="°"   accent="text-slate-300"   />
+          <StatCard label="Eccentricity" value={eccentricity}           accent="text-slate-300"   />
+          <StatCard label="Perigee"     value={perigee}       unit="km"  accent="text-slate-300"   />
+          <StatCard label="Apogee"      value={apogee}        unit="km"  accent="text-rose-400"    />
+        </div>
 
-            {/* Left column — live position + orbital params */}
-            <div className="lg:col-span-1 flex flex-col gap-4">
+        {/* ── Main Grid: Live State + Charts ─────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
 
-              {/* Live position */}
-              <SectionCard>
-                <SectionLabel>Live Position · SGP4</SectionLabel>
-                <div className="flex flex-col gap-5">
-                  <StatCard label="Latitude"  value={position?.lat.toFixed(6)} unit="°" accent="text-white" />
-                  <StatCard label="Longitude" value={position?.lng.toFixed(6)} unit="°" accent="text-white" />
-                  <div style={{ borderTop: '1px solid rgba(30,41,59,0.7)', paddingTop: '1.25rem' }}>
-                    <StatCard label="Altitude" value={position?.altitude.toFixed(1)} unit="km" accent="text-emerald-400" large />
+          {/* Left column — Live Position + Spacecraft Params */}
+          <div className="lg:col-span-1 flex flex-col gap-5">
+
+            {/* Live position */}
+            <SectionCard>
+              <SectionLabel>Live Position · SGP4</SectionLabel>
+              <div className="flex flex-col gap-5">
+                <StatCard label="Latitude"  value={position?.lat.toFixed(6)} unit="°" />
+                <StatCard label="Longitude" value={position?.lng.toFixed(6)} unit="°" />
+                <div style={{ borderTop: '1px solid rgba(30,41,59,0.7)', paddingTop: '1.25rem' }}>
+                  <StatCard label="Altitude" value={position?.altitude.toFixed(1)} unit="km" accent="text-emerald-400" large />
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* Orbital velocity */}
+            {velocity && (
+              <div
+                className="rounded-2xl p-6"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(6,78,59,0.6) 0%, rgba(5,46,37,0.8) 100%)',
+                  border: '1px solid rgba(52,211,153,0.2)',
+                }}
+              >
+                <SectionLabel>Orbital Velocity</SectionLabel>
+                <p className="text-4xl font-black text-white font-mono leading-none">{velocity}</p>
+                <p className="text-[9px] font-bold text-emerald-500 mt-1.5 tracking-[0.2em] uppercase font-mono">
+                  km / second
+                </p>
+              </div>
+            )}
+
+            {/* Spacecraft params */}
+            <SectionCard>
+              <SectionLabel>Spacecraft · Propulsion</SectionLabel>
+              <div className="flex flex-col gap-4">
+                {[
+                  { key: 'wet_mass_kg', label: 'Wet Mass', unit: 'kg' },
+                  { key: 'dry_mass_kg', label: 'Dry Mass', unit: 'kg' },
+                  { key: 'isp_s',       label: 'Isp',      unit: 's'  },
+                  { key: 'thrust_n',    label: 'Thrust',   unit: 'N'  },
+                ].map(({ key, label, unit }) => (
+                  <div key={key} className="flex flex-col gap-1">
+                    <label
+                      className="font-mono uppercase tracking-[0.2em]"
+                      style={{ fontSize: '9px', color: '#22d3ee', opacity: 0.7 }}
+                    >
+                      {label} <span style={{ color: '#334155' }}>({unit})</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={scParams[key]}
+                      onChange={e => setScParams(prev => ({ ...prev, [key]: e.target.value }))}
+                      placeholder="—"
+                      className="w-full bg-transparent font-mono text-sm text-white placeholder-slate-700 px-3 py-2 rounded-lg"
+                      style={{ border: '1px solid rgba(30,41,59,0.8)', outline: 'none' }}
+                      onFocus={e => { e.target.style.borderColor = 'rgba(34,211,238,0.4)'; }}
+                      onBlur={e  => { e.target.style.borderColor = 'rgba(30,41,59,0.8)';   }}
+                    />
                   </div>
-                </div>
-              </SectionCard>
+                ))}
 
-              {/* Velocity — highlight card */}
-              {velocity && (
-                <div
-                  className="rounded-2xl p-6"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(6,78,59,0.6) 0%, rgba(5,46,37,0.8) 100%)',
-                    border: '1px solid rgba(52,211,153,0.2)',
-                  }}
-                >
-                  <SectionLabel>Orbital Velocity</SectionLabel>
-                  <p className="text-4xl font-black text-white font-mono leading-none">{velocity}</p>
-                  <p className="text-[9px] font-bold text-emerald-500 mt-1.5 tracking-[0.2em] uppercase font-mono">
-                    km / second
-                  </p>
-                </div>
-              )}
-
-              {/* Orbital parameters — only fields that exist */}
-              {(inclination || eccentricity || perigee || apogee || period) && (
-                <SectionCard>
-                  <SectionLabel>Orbital Parameters</SectionLabel>
-                  <div className="flex flex-col gap-4">
-                    {inclination  && <StatCard label="Inclination"  value={inclination}  accent="text-slate-300" />}
-                    {eccentricity && <StatCard label="Eccentricity" value={eccentricity} accent="text-slate-300" />}
-                    {perigee      && <StatCard label="Perigee"      value={perigee}      accent="text-slate-300" />}
-                    {apogee       && <StatCard label="Apogee"       value={apogee}       accent="text-slate-300" />}
-                    {period       && <StatCard label="Period"       value={period}       accent="text-sky-400"   />}
+                {propellantAvail && (
+                  <div
+                    className="px-3 py-2.5 rounded-lg"
+                    style={{ background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.1)' }}
+                  >
+                    <p className="font-mono uppercase tracking-[0.2em] mb-1" style={{ fontSize: '9px', color: '#334155' }}>
+                      Propellant Available
+                    </p>
+                    <p className="font-mono font-bold text-lg text-white">
+                      {propellantAvail}<span className="text-xs font-normal text-slate-600 ml-1">kg</span>
+                    </p>
                   </div>
-                </SectionCard>
-              )}
-            </div>
+                )}
 
-            {/* Right — 2D map */}
-            <div
-              className="lg:col-span-3 rounded-2xl overflow-hidden"
-              style={{
-                height: 680,
-                border: '1px solid rgba(30,41,59,0.7)',
-                boxShadow: '0 0 40px rgba(34,211,238,0.04)',
-              }}
-            >
-              {position ? (
-                <SatelliteMap position={position} satelliteName={satellite.name} />
-              ) : (
-                <div className="h-full flex items-center justify-center" style={{ background: 'rgba(2,6,23,0.9)' }}>
-                  <p className="text-[10px] tracking-[0.25em] text-cyan-700 uppercase font-mono animate-pulse">
-                    Awaiting position fix…
-                  </p>
+                <div className="flex items-center gap-3 mt-1">
+                  <button
+                    onClick={saveScParams}
+                    disabled={scSaving}
+                    className="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest font-mono transition-all"
+                    style={{
+                      background: scSaving ? 'rgba(34,211,238,0.05)' : 'rgba(34,211,238,0.15)',
+                      border: '1px solid rgba(34,211,238,0.35)',
+                      color: '#22d3ee',
+                      opacity: scSaving ? 0.5 : 1,
+                    }}
+                  >
+                    {scSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  {scSaved  && <span className="font-mono text-[10px] tracking-[0.15em] text-emerald-400 uppercase">✓ Saved</span>}
+                  {scError  && <span className="font-mono text-[10px] text-red-400">{scError}</span>}
                 </div>
-              )}
-            </div>
+              </div>
+            </SectionCard>
           </div>
-        )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB 2 — ORBITAL ANALYSIS
-            TLE history charts — apogee/perigee, eccentricity, inclination, decay
-        ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'analysis' && (
-          <div className="animate-in fade-in duration-500">
-
+          {/* Right column — Orbital History Charts */}
+          <div className="lg:col-span-2">
             {sortedHistory.length === 0 ? (
-              <SectionCard className="text-center py-20">
+              <SectionCard className="h-full flex flex-col items-center justify-center py-20 text-center">
                 <p className="text-[10px] tracking-[0.25em] text-slate-600 uppercase font-mono">
                   No orbital history recorded yet.
                 </p>
@@ -483,242 +498,127 @@ const SatelliteDetails = () => {
                 </p>
               </SectionCard>
             ) : (
-              <>
-                {/* Summary strip — latest derived values */}
-                {latestDerived && (
-                  <div
-                    className="rounded-2xl p-5 mb-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-5"
-                    style={{
-                      background: 'rgba(2,6,23,0.7)',
-                      border: '1px solid rgba(30,41,59,0.8)',
-                    }}
-                  >
-                    <StatCard label="Epoch"       value={new Date(latestDerived.epoch).toLocaleDateString()} accent="text-cyan-300" />
-                    <StatCard label="Inclination" value={`${parseFloat(latestDerived.inclination).toFixed(3)}°`} accent="text-slate-300" />
-                    <StatCard label="Eccentricity" value={parseFloat(latestDerived.eccentricity).toFixed(7)} accent="text-slate-300" />
-                    <StatCard label="Perigee"     value={`${parseFloat(latestDerived.perigee_km).toFixed(0)} km`} accent="text-emerald-400" />
-                    <StatCard label="Apogee"      value={`${parseFloat(latestDerived.apogee_km).toFixed(0)} km`} accent="text-rose-400" />
-                    <StatCard label="Period"      value={`${parseFloat(latestDerived.orbital_period_minutes).toFixed(1)} min`} accent="text-sky-400" />
-                    <StatCard label="Velocity"    value={`${parseFloat(latestDerived.velocity_kms).toFixed(3)} km/s`} accent="text-yellow-400" />
-                  </div>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                {/* Charts grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-                  {/* Apogee vs Perigee */}
-                  <SectionCard>
-                    <div style={{ height: 320 }}>
-                      <Line
-                        options={getChartOptions('ORBITAL ENVELOPE — APOGEE VS PERIGEE (KM)')}
-                        data={{
-                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                          datasets: [
-                            {
-                              label: 'Apogee',
-                              data: sortedHistory.map(d => d.apogee_km),
-                              borderColor: '#f43f5e',
-                              borderWidth: 1.5,
-                              pointRadius: 0,
-                              tension: 0.3,
-                            },
-                            {
-                              label: 'Perigee',
-                              data: sortedHistory.map(d => d.perigee_km),
-                              borderColor: '#10b981',
-                              borderWidth: 1.5,
-                              pointRadius: 0,
-                              tension: 0.3,
-                            },
-                          ],
-                        }}
-                      />
-                    </div>
-                  </SectionCard>
-
-                  {/* Eccentricity */}
-                  <SectionCard>
-                    <div style={{ height: 320 }}>
-                      <Line
-                        options={getChartOptions('ECCENTRICITY TREND')}
-                        data={{
-                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                          datasets: [{
-                            label: 'Eccentricity',
-                            data: sortedHistory.map(d => d.eccentricity),
-                            borderColor: '#f59e0b',
-                            backgroundColor: 'rgba(245,158,11,0.04)',
-                            fill: true,
+                {/* Apogee vs Perigee */}
+                <SectionCard>
+                  <div style={{ height: 260 }}>
+                    <Line
+                      options={getChartOptions('APOGEE VS PERIGEE (KM)')}
+                      data={{
+                        labels: chartLabels,
+                        datasets: [
+                          {
+                            label: 'Apogee',
+                            data: sortedHistory.map(d => d.apogee_km),
+                            borderColor: '#f43f5e',
                             borderWidth: 1.5,
-                            pointRadius: 2,
-                            pointBackgroundColor: '#f59e0b',
-                          }],
-                        }}
-                      />
-                    </div>
-                  </SectionCard>
-
-                  {/* Inclination */}
-                  <SectionCard>
-                    <div style={{ height: 280 }}>
-                      <Line
-                        options={getChartOptions('INCLINATION (°)')}
-                        data={{
-                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                          datasets: [{
-                            label: 'Inclination',
-                            data: sortedHistory.map(d => d.inclination),
-                            borderColor: '#8b5cf6',
-                            borderWidth: 1.5,
-                            tension: 0.4,
                             pointRadius: 0,
-                          }],
-                        }}
-                      />
-                    </div>
-                  </SectionCard>
-
-                  {/* Orbital decay */}
-                  <SectionCard>
-                    <div style={{ height: 280 }}>
-                      <Line
-                        options={getChartOptions('ORBITAL DECAY — MEAN MOTION DOT')}
-                        data={{
-                          labels: sortedHistory.map(d => new Date(d.epoch).toLocaleDateString()),
-                          datasets: [{
-                            label: 'Decay',
-                            data: sortedHistory.map(d => d.mean_motion_dot),
-                            borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239,68,68,0.04)',
-                            fill: true,
+                            tension: 0.3,
+                          },
+                          {
+                            label: 'Perigee',
+                            data: sortedHistory.map(d => d.perigee_km),
+                            borderColor: '#10b981',
                             borderWidth: 1.5,
-                            tension: 0.4,
                             pointRadius: 0,
-                          }],
-                        }}
-                      />
-                    </div>
-                  </SectionCard>
-
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB 3 — SPACECRAFT PARAMS
-            Propulsion parameters for Tsiolkovsky fuel cost calculations
-        ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'spacecraft' && (
-          <div className="max-w-lg animate-in fade-in duration-500">
-            <SectionCard>
-              <SectionLabel>Spacecraft · Propulsion Parameters</SectionLabel>
-              <p className="text-[10px] text-slate-600 mb-8 leading-relaxed font-mono">
-                Enter your spacecraft's propulsion specs. These are used to calculate fuel cost
-                and burn duration in the Maneuver Sandbox.
-              </p>
-
-              <div className="flex flex-col gap-6">
-                {[
-                  { key: 'wet_mass_kg', label: 'Wet Mass',  unit: 'kg',  hint: 'Total mass including propellant'   },
-                  { key: 'dry_mass_kg', label: 'Dry Mass',  unit: 'kg',  hint: 'Mass without propellant'           },
-                  { key: 'isp_s',       label: 'Isp',       unit: 's',   hint: 'Specific impulse of your thruster' },
-                  { key: 'thrust_n',    label: 'Thrust',    unit: 'N',   hint: 'Thruster output force'             },
-                ].map(({ key, label, unit, hint }) => (
-                  <div key={key} className="flex flex-col gap-1.5">
-                    <div className="flex items-baseline justify-between">
-                      <label
-                        className="font-mono uppercase tracking-[0.2em]"
-                        style={{ fontSize: '9px', color: '#22d3ee', opacity: 0.7 }}
-                      >
-                        {label} <span style={{ color: '#334155' }}>({unit})</span>
-                      </label>
-                      <span className="font-mono" style={{ fontSize: '9px', color: '#1e3a5f' }}>{hint}</span>
-                    </div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={scParams[key]}
-                      onChange={e => setScParams(prev => ({ ...prev, [key]: e.target.value }))}
-                      placeholder="—"
-                      className="w-full bg-transparent font-mono text-sm text-white placeholder-slate-700 px-3 py-2.5 rounded-lg"
-                      style={{
-                        border: '1px solid rgba(30,41,59,0.8)',
-                        outline: 'none',
+                            tension: 0.3,
+                          },
+                        ],
                       }}
-                      onFocus={e => { e.target.style.borderColor = 'rgba(34,211,238,0.4)'; }}
-                      onBlur={e  => { e.target.style.borderColor = 'rgba(30,41,59,0.8)';   }}
                     />
                   </div>
-                ))}
-              </div>
+                </SectionCard>
 
-              {/* Derived preview — fuel available */}
-              {scParams.wet_mass_kg && scParams.dry_mass_kg && (
-                <div
-                  className="mt-6 px-4 py-3 rounded-lg"
-                  style={{ background: 'rgba(34,211,238,0.05)', border: '1px solid rgba(34,211,238,0.1)' }}
-                >
-                  <p className="font-mono uppercase tracking-[0.2em] mb-1" style={{ fontSize: '9px', color: '#334155' }}>
-                    Propellant Available
-                  </p>
-                  <p className="font-mono font-bold text-lg text-white">
-                    {(parseFloat(scParams.wet_mass_kg) - parseFloat(scParams.dry_mass_kg)).toFixed(1)}
-                    <span className="text-xs font-normal text-slate-600 ml-1">kg</span>
-                  </p>
-                </div>
-              )}
+                {/* Eccentricity */}
+                <SectionCard>
+                  <div style={{ height: 260 }}>
+                    <Line
+                      options={getChartOptions('ECCENTRICITY')}
+                      data={{
+                        labels: chartLabels,
+                        datasets: [{
+                          label: 'Eccentricity',
+                          data: sortedHistory.map(d => d.eccentricity),
+                          borderColor: '#f59e0b',
+                          backgroundColor: 'rgba(245,158,11,0.04)',
+                          fill: true,
+                          borderWidth: 1.5,
+                          pointRadius: 2,
+                          pointBackgroundColor: '#f59e0b',
+                        }],
+                      }}
+                    />
+                  </div>
+                </SectionCard>
 
-              {/* Save button + feedback */}
-              <div className="mt-8 flex items-center gap-4">
-                <button
-                  onClick={saveScParams}
-                  disabled={scSaving}
-                  className="px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest font-mono transition-all"
-                  style={{
-                    background: scSaving ? 'rgba(34,211,238,0.05)' : 'rgba(34,211,238,0.15)',
-                    border: '1px solid rgba(34,211,238,0.35)',
-                    color: '#22d3ee',
-                    opacity: scSaving ? 0.5 : 1,
-                  }}
-                >
-                  {scSaving ? 'Saving…' : 'Save Parameters'}
-                </button>
-                {scSaved && (
-                  <span className="font-mono text-[10px] tracking-[0.15em] text-emerald-400 uppercase">
-                    ✓ Saved
-                  </span>
-                )}
-                {scError && (
-                  <span className="font-mono text-[10px] text-red-400">{scError}</span>
-                )}
+                {/* Inclination */}
+                <SectionCard>
+                  <div style={{ height: 260 }}>
+                    <Line
+                      options={getChartOptions('INCLINATION (°)')}
+                      data={{
+                        labels: chartLabels,
+                        datasets: [{
+                          label: 'Inclination',
+                          data: sortedHistory.map(d => d.inclination),
+                          borderColor: '#8b5cf6',
+                          borderWidth: 1.5,
+                          tension: 0.4,
+                          pointRadius: 0,
+                        }],
+                      }}
+                    />
+                  </div>
+                </SectionCard>
+
+                {/* Orbital decay */}
+                <SectionCard>
+                  <div style={{ height: 260 }}>
+                    <Line
+                      options={getChartOptions('ORBITAL DECAY — MEAN MOTION DOT')}
+                      data={{
+                        labels: chartLabels,
+                        datasets: [{
+                          label: 'Decay',
+                          data: sortedHistory.map(d => d.mean_motion_dot),
+                          borderColor: '#ef4444',
+                          backgroundColor: 'rgba(239,68,68,0.04)',
+                          fill: true,
+                          borderWidth: 1.5,
+                          tension: 0.4,
+                          pointRadius: 0,
+                        }],
+                      }}
+                    />
+                  </div>
+                </SectionCard>
               </div>
-            </SectionCard>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* ══════════════════════════════════════════════════════════════════
-            TAB 4 — SYSTEM HEALTH
-            Manual CSV telemetry uplink + battery chart
-        ══════════════════════════════════════════════════════════════════ */}
-        {activeTab === 'health' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 animate-in fade-in duration-500">
+        {/* ── Telemetry ───────────────────────────────────────────────────── */}
+        <div
+          className="mb-6 pb-4"
+          style={{ borderTop: '1px solid rgba(30,41,59,0.5)', paddingTop: '2rem' }}
+        >
+          <p className="font-mono uppercase tracking-[0.22em] mb-5" style={{ fontSize: '9px', color: '#22d3ee', opacity: 0.6 }}>
+            Telemetry
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-            {/* Upload panel */}
             <SectionCard className="md:col-span-1">
-              <SectionLabel>Manual Telemetry Uplink</SectionLabel>
+              <SectionLabel>Manual Uplink · CSV</SectionLabel>
               <p className="text-[10px] text-slate-600 mb-6 leading-relaxed font-mono">
-                Upload a .CSV packet to log battery and fuel telemetry for this satellite.
+                Upload a .CSV packet to log battery and fuel telemetry.
               </p>
               <Upload noradId={noradId} onUploadSuccess={() => {}} />
             </SectionCard>
 
-            {/* Battery chart */}
             <SectionCard className="md:col-span-2">
               {telemetry.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center py-20 gap-3">
+                <div className="h-full flex flex-col items-center justify-center py-16 gap-3">
                   <p className="text-[10px] tracking-[0.25em] text-slate-600 uppercase font-mono">
                     No telemetry packets on record.
                   </p>
@@ -727,7 +627,7 @@ const SatelliteDetails = () => {
                   </p>
                 </div>
               ) : (
-                <div style={{ height: 440 }}>
+                <div style={{ height: 320 }}>
                   <Line
                     options={getChartOptions('BATTERY POWER BUS (%)')}
                     data={{
@@ -751,7 +651,7 @@ const SatelliteDetails = () => {
             </SectionCard>
 
           </div>
-        )}
+        </div>
 
       </div>
     </div>
