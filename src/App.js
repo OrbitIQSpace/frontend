@@ -5,6 +5,8 @@ import AddSatellite from './components/AddSatellite';
 import Satellites from './components/Satellites';
 import SatelliteDetails from './components/SatelliteDetails';
 import DigitalTwin from './components/DigitalTwin';
+import ManeuverSandbox from './components/ManeuverSandbox';
+import GroundStations from './pages/GroundStations';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -112,22 +114,39 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
 
             {/* Add Satellite — dashboard only */}
             {showAddButton && (
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="px-5 py-2 rounded-lg font-medium text-sm transition-all"
-                style={{
-                  background: 'rgba(8,145,178,0.25)',
-                  border: '1px solid rgba(34,211,238,0.35)',
-                  color: '#22d3ee',
-                  fontFamily: '"JetBrains Mono", monospace',
-                  fontSize: '11px',
-                  letterSpacing: '0.15em',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.4)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.25)')}
-              >
-                + Add Satellite
-              </button>
+              <>
+                <Link
+                  to="/ground-stations"
+                  className="px-4 py-2 rounded-lg text-sm transition-all"
+                  style={{
+                    border: '1px solid rgba(30,41,59,0.7)',
+                    color: '#475569',
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: '11px',
+                    letterSpacing: '0.12em',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+                >
+                  📡 Ground Stations
+                </Link>
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="px-5 py-2 rounded-lg font-medium text-sm transition-all"
+                  style={{
+                    background: 'rgba(8,145,178,0.25)',
+                    border: '1px solid rgba(34,211,238,0.35)',
+                    color: '#22d3ee',
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: '11px',
+                    letterSpacing: '0.15em',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.4)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(8,145,178,0.25)')}
+                >
+                  + Add Satellite
+                </button>
+              </>
             )}
 
             <SignedIn>
@@ -222,6 +241,20 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
           <Route path="/satellite/:noradId/digital-twin" element={
             <SignedIn>
               <DigitalTwin />
+            </SignedIn>
+          } />
+
+          {/* MANEUVER SIMULATION SANDBOX */}
+          <Route path="/satellite/:noradId/maneuver" element={
+            <SignedIn>
+              <ManeuverSandbox />
+            </SignedIn>
+          } />
+
+          {/* GROUND STATIONS */}
+          <Route path="/ground-stations" element={
+            <SignedIn>
+              <GroundStations />
             </SignedIn>
           } />
         </Routes>

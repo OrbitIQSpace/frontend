@@ -1,11 +1,12 @@
 // src/components/DigitalTwin.js — Mission Control Viewer
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import axios from '../api';
 import { useAuth } from '@clerk/clerk-react';
 import { Viewer, Entity } from 'resium';
 import * as Cesium from 'cesium';
 import { getSatelliteInfo } from 'tle.js';
+import useGroundStations from '../hooks/useGroundStations';
 
 Cesium.Ion.defaultAccessToken = process.env.REACT_APP_CESIUM_TOKEN || '';
 
@@ -24,46 +25,31 @@ const formatDeg = (rad, posLabel, negLabel) => {
 };
 
 // ── SGP4 ground track computation ────────────────────────────────────────────
-// Returns array of Cartesian3 positions sampled over `durationMin` minutes
-// starting from `startMs` epoch, every `stepSec` seconds.
-// Positions are on the ellipsoid surface (height=0) for ground track rendering.
 const computeGroundTrack = (tle, startMs, durationMin, stepSec = 30) => {
   const positions = [];
   const steps = Math.floor((durationMin * 60) / stepSec);
-
   for (let i = 0; i <= steps; i++) {
     const t = startMs + i * stepSec * 1000;
     try {
       const info = getSatelliteInfo(tle, t);
       if (info && typeof info.lat === 'number' && !isNaN(info.lat)) {
-        // Use a small positive height to keep the line above terrain
-        positions.push(
-          Cesium.Cartesian3.fromDegrees(info.lng, info.lat, 8000)
-        );
+        positions.push(Cesium.Cartesian3.fromDegrees(info.lng, info.lat, 8000));
       }
     } catch {}
   }
   return positions;
 };
 
-// Split a polyline at antimeridian crossings to avoid wrap-around artifacts.
-// Returns an array of position arrays (segments).
+// Split a polyline at antimeridian crossings
 const splitAtAntimeridian = (positions) => {
   if (!positions.length) return [];
   const segments = [];
   let current = [positions[0]];
-
   for (let i = 1; i < positions.length; i++) {
     const prev = positions[i - 1];
     const curr = positions[i];
-
-    const prevCart = Cesium.Cartographic.fromCartesian(prev);
-    const currCart = Cesium.Cartographic.fromCartesian(curr);
-
-    const prevLng = Cesium.Math.toDegrees(prevCart.longitude);
-    const currLng = Cesium.Math.toDegrees(currCart.longitude);
-
-    // If longitude jumps more than 180° it crossed the antimeridian
+    const prevLng = Cesium.Math.toDegrees(Cesium.Cartographic.fromCartesian(prev).longitude);
+    const currLng = Cesium.Math.toDegrees(Cesium.Cartographic.fromCartesian(curr).longitude);
     if (Math.abs(currLng - prevLng) > 180) {
       segments.push(current);
       current = [curr];
@@ -88,9 +74,7 @@ const StatusDot = ({ active }) => (
 
 const DataBlock = ({ label, value, unit, accent = 'text-white' }) => (
   <div className="flex flex-col gap-0.5">
-    <span className="text-[8px] font-mono tracking-[0.22em] uppercase text-slate-500">
-      {label}
-    </span>
+    <span className="text-[8px] font-mono tracking-[0.22em] uppercase text-slate-500">{label}</span>
     <span className={`text-sm font-mono font-semibold leading-none ${accent}`}>
       {value ?? '—'}
       {unit && <span className="text-[9px] font-normal text-slate-600 ml-0.5">{unit}</span>}
@@ -145,25 +129,44 @@ const DigitalTwin = () => {
   const [error, setError]                     = useState(null);
   const [clockStr, setClockStr]               = useState(utcClock());
   const [uptime, setUptime]                   = useState(0);
-
-  // View mode: '3d' | '2d'
   const [viewMode, setViewMode]               = useState('3d');
 
-  // Ref to track ground track entities drawn imperatively into the Cesium viewer
-  const trackEntitiesRef = useRef([]);
+  const trackEntitiesRef   = useRef([]);
+  const viewerRef          = useRef(null);
+  const bordersLoadedRef   = useRef(false);
+  const mountTimeRef       = useRef(Date.now());
+  const trackRedrawTimer   = useRef(null);
+  const hasAutoCenteredRef = useRef(false);
+  const imageryLoadedRef   = useRef(false);
 
-  const viewerRef        = useRef(null);
-  const bordersLoadedRef = useRef(false);
-  const mountTimeRef     = useRef(Date.now());
-  const trackRedrawTimer = useRef(null);
+  // ── Ground stations ───────────────────────────────────────────────────────
+  const { stations } = useGroundStations(viewerRef, currentPosition);
 
-  // Stable provider refs
-  const imageryProviderRef = useRef(
-    new Cesium.TileMapServiceImageryProvider({
-      url: '/cesium/Assets/Textures/NaturalEarthII',
-    })
-  );
-  const terrainProviderRef = useRef(new Cesium.EllipsoidTerrainProvider({}));
+  // ── Imagery: imperative load after viewer mounts ──────────────────────────
+  // Loading via useRef prop silently fails on some Resium versions;
+  // replacing the base layer directly on cesiumElement is reliable.
+  useEffect(() => {
+    if (imageryLoadedRef.current) return;
+    if (!viewerRef.current?.cesiumElement) return;
+    imageryLoadedRef.current = true;
+
+    const viewer = viewerRef.current.cesiumElement;
+    viewer.imageryLayers.removeAll();
+    viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        credit: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
+        maximumLevel: 19,
+      })
+    );
+    const layer = viewer.imageryLayers.get(0);
+    if (layer) {
+      layer.brightness = 0.45;
+      layer.contrast   = 1.2;
+      layer.saturation = 0.4;
+      layer.gamma      = 1.1;
+    }
+  }); // runs every render until ref is set — ref guards re-entry
 
   // ── UTC clock + session timer ─────────────────────────────────────────────
   useEffect(() => {
@@ -223,95 +226,67 @@ const DigitalTwin = () => {
   }, [tle]);
 
   // ── Ground track computation + redraw ─────────────────────────────────────
-  // Called on first position fix and every 60 s thereafter.
-  // Draws:
-  //   • Past track  — last 15 min, faint cyan
-  //   • Future track — one full orbital period ahead, brighter cyan
-  // Splits each at the antimeridian to avoid wrap-around lines.
   const drawGroundTrack = useCallback(() => {
     if (!tle || !viewerRef.current?.cesiumElement) return;
-    const viewer  = viewerRef.current.cesiumElement;
-    const now     = Date.now();
+    const viewer = viewerRef.current.cesiumElement;
+    const now    = Date.now();
 
-    // Derive orbital period from TLE mean motion (revs/day → minutes/rev)
-    let periodMin = 90; // fallback
+    let periodMin = 90;
     try {
       const meanMotion = parseFloat(tle[1].slice(52, 63));
       if (meanMotion > 0) periodMin = 1440 / meanMotion;
     } catch {}
 
-    // Past 15 min (step back from now)
     const pastPositions   = computeGroundTrack(tle, now - 15 * 60 * 1000, 15, 20);
-    // Future one orbit ahead
     const futurePositions = computeGroundTrack(tle, now, periodMin, 30);
 
     const pastSegments   = splitAtAntimeridian(pastPositions);
     const futureSegments = splitAtAntimeridian(futurePositions);
 
-    // Remove any previous track entities
     trackEntitiesRef.current.forEach(e => { try { viewer.entities.remove(e); } catch {} });
     trackEntitiesRef.current = [];
 
     const added = [];
 
-    // Draw past track segments — dimmer
+    // Past track — yellow, same thickness
     pastSegments.forEach(seg => {
       if (seg.length < 2) return;
-      const e = viewer.entities.add({
+      added.push(viewer.entities.add({
         polyline: {
-          positions:   seg,
-          width:       1.2,
-          material:    new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.1,
-            color:     Cesium.Color.fromCssColorString('#22d3ee').withAlpha(0.18),
+          positions:     seg,
+          width:         3.5,
+          material:      new Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.3,
+            color:     Cesium.Color.fromCssColorString('#fbbf24').withAlpha(0.75),
           }),
-          arcType:     Cesium.ArcType.NONE,
+          arcType:       Cesium.ArcType.NONE,
           clampToGround: false,
         },
-      });
-      added.push(e);
+      }));
     });
 
-    // Draw future track segments — brighter
+    // Future track — bright cyan, hard to miss
     futureSegments.forEach((seg, idx) => {
       if (seg.length < 2) return;
-
-      // First segment (current orbit) is brightest, subsequent orbits dim slightly
-      const alpha = idx === 0 ? 0.65 : 0.35;
-      const e = viewer.entities.add({
+      const alpha = idx === 0 ? 0.92 : 0.55;
+      added.push(viewer.entities.add({
         polyline: {
-          positions:   seg,
-          width:       idx === 0 ? 1.8 : 1.2,
-          material:    new Cesium.PolylineGlowMaterialProperty({
-            glowPower: idx === 0 ? 0.25 : 0.1,
+          positions:     seg,
+          width:         idx === 0 ? 3.5 : 2.5,
+          material:      new Cesium.PolylineGlowMaterialProperty({
+            glowPower: idx === 0 ? 0.45 : 0.2,
             color:     Cesium.Color.fromCssColorString('#22d3ee').withAlpha(alpha),
           }),
-          arcType:     Cesium.ArcType.NONE,
+          arcType:       Cesium.ArcType.NONE,
           clampToGround: false,
         },
-      });
-      added.push(e);
+      }));
     });
 
     trackEntitiesRef.current = added;
   }, [tle]);
 
-  // ── Trigger initial draw + 60 s redraw interval ───────────────────────────
-  useEffect(() => {
-    if (!tle || !currentPosition) return;
-
-    // Small delay to ensure viewer is mounted
-    const initialTimer = setTimeout(() => drawGroundTrack(), 800);
-
-    trackRedrawTimer.current = setInterval(() => drawGroundTrack(), 60 * 1000);
-
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(trackRedrawTimer.current);
-    };
-  }, [tle, currentPosition, drawGroundTrack]);
-
-  // ── GeoJSON borders + globe styling — once ────────────────────────────────
+  // ── GeoJSON coastlines — once ─────────────────────────────────────────────
   useEffect(() => {
     if (!currentPosition || !viewerRef.current?.cesiumElement) return;
     if (bordersLoadedRef.current) return;
@@ -319,24 +294,9 @@ const DigitalTwin = () => {
 
     const viewer = viewerRef.current.cesiumElement;
 
-    const layers = viewer.imageryLayers;
-    if (layers.length > 0) {
-      layers.get(0).brightness = 0.52;
-      layers.get(0).contrast   = 1.35;
-      layers.get(0).saturation = 0.25;
-    }
-
-    const load = (url, color, width) =>
-      Cesium.GeoJsonDataSource.load(url, {
-        stroke:      Cesium.Color.fromCssColorString(color),
-        fill:        Cesium.Color.TRANSPARENT,
-        strokeWidth: width,
-      });
-
     const sanitizeSource = (src, strokeColor) => {
       const toRemove = [];
       const toAdd    = [];
-
       src.entities.values.forEach(entity => {
         if (entity.polyline) {
           entity.polyline.clampToGround = false;
@@ -352,39 +312,32 @@ const DigitalTwin = () => {
             positions = val?.positions ?? (Array.isArray(val) ? val : null);
           }
           if (Array.isArray(positions) && positions.length > 1) {
-            toAdd.push(
-              new Cesium.Entity({
-                polyline: {
-                  positions:     new Cesium.ConstantProperty([...positions, positions[0]]),
-                  width:         new Cesium.ConstantProperty(1),
-                  material:      new Cesium.ColorMaterialProperty(
-                    Cesium.Color.fromCssColorString(strokeColor)
-                  ),
-                  clampToGround: new Cesium.ConstantProperty(false),
-                  arcType:       new Cesium.ConstantProperty(Cesium.ArcType.NONE),
-                },
-              })
-            );
+            toAdd.push(new Cesium.Entity({
+              polyline: {
+                positions:     new Cesium.ConstantProperty([...positions, positions[0]]),
+                width:         new Cesium.ConstantProperty(1),
+                material:      new Cesium.ColorMaterialProperty(
+                  Cesium.Color.fromCssColorString(strokeColor)
+                ),
+                clampToGround: new Cesium.ConstantProperty(false),
+                arcType:       new Cesium.ConstantProperty(Cesium.ArcType.NONE),
+              },
+            }));
           }
           toRemove.push(entity);
         }
       });
-
       toRemove.forEach(e => src.entities.remove(e));
       toAdd.forEach(e => src.entities.add(e));
     };
 
-    Promise.all([
-      load('https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson', '#22d3ee90', 1.2),
-      load('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json', '#0e749080', 0.7),
-    ])
-      .then(([countries, states]) => {
-        sanitizeSource(countries, '#22d3ee90');
-        sanitizeSource(states,    '#0e749080');
-        viewer.dataSources.add(countries);
-        viewer.dataSources.add(states);
-      })
-      .catch(err => console.warn('GeoJSON border load failed:', err));
+    Cesium.GeoJsonDataSource.load(
+      'https://raw.githubusercontent.com/datasets/geo-boundaries-world-110m/master/countries.geojson',
+      { stroke: Cesium.Color.fromCssColorString('rgba(180,180,180,0.18)'), fill: Cesium.Color.TRANSPARENT, strokeWidth: 0.8 }
+    ).then(coastlines => {
+      sanitizeSource(coastlines, 'rgba(180,180,180,0.18)');
+      viewer.dataSources.add(coastlines);
+    }).catch(err => console.warn('GeoJSON load failed:', err));
   }, [currentPosition]);
 
   // ── Camera: track satellite ───────────────────────────────────────────────
@@ -405,32 +358,59 @@ const DigitalTwin = () => {
     });
   }, [currentPosition]);
 
-  // ── Camera: reset ─────────────────────────────────────────────────────────
-  const handleResetView = useCallback(() => {
-    viewerRef.current?.cesiumElement?.camera.flyHome(1.5);
-  }, []);
+  // ── Camera: center on satellite from directly above ───────────────────────
+  const handleCenterView = useCallback(() => {
+    if (!currentPosition || !viewerRef.current?.cesiumElement) return;
+    viewerRef.current.cesiumElement.camera.flyTo({
+      destination: Cesium.Cartesian3.fromRadians(
+        currentPosition.lng,
+        currentPosition.lat,
+        currentPosition.height + 9000000
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch:   Cesium.Math.toRadians(-90),
+        roll:    0.0,
+      },
+      duration: 1.8,
+    });
+  }, [currentPosition]);
+
+  // ── Trigger initial draw + 60 s redraw — after handleCenterView ──────────
+  useEffect(() => {
+    if (!tle || !currentPosition) return;
+    const initialTimer = setTimeout(() => {
+      drawGroundTrack();
+      if (!hasAutoCenteredRef.current) {
+        hasAutoCenteredRef.current = true;
+        handleCenterView();
+      }
+    }, 800);
+    trackRedrawTimer.current = setInterval(() => drawGroundTrack(), 60 * 1000);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(trackRedrawTimer.current);
+    };
+  }, [tle, currentPosition, drawGroundTrack, handleCenterView]);
 
   // ── View mode toggle — 3D ↔ 2D ───────────────────────────────────────────
   const handleToggleView = useCallback(() => {
     const viewer = viewerRef.current?.cesiumElement;
     if (!viewer) return;
-
     if (viewMode === '3d') {
-      // Morph to flat 2D
       viewer.scene.morphTo2D(1.0);
       setViewMode('2d');
     } else {
-      // Morph back to 3D globe
       viewer.scene.morphTo3D(1.0);
       setViewMode('3d');
     }
   }, [viewMode]);
 
   // ── Derived display values ────────────────────────────────────────────────
-  const altKm    = currentPosition ? Math.round(currentPosition.height / 1000) : null;
-  const velKms   = currentPosition ? currentPosition.velocity.toFixed(2) : null;
-  const latStr   = currentPosition ? formatDeg(currentPosition.lat, 'N', 'S') : null;
-  const lngStr   = currentPosition ? formatDeg(currentPosition.lng, 'E', 'W') : null;
+  const altKm     = currentPosition ? Math.round(currentPosition.height / 1000) : null;
+  const velKms    = currentPosition ? currentPosition.velocity.toFixed(2) : null;
+  const latStr    = currentPosition ? formatDeg(currentPosition.lat, 'N', 'S') : null;
+  const lngStr    = currentPosition ? formatDeg(currentPosition.lng, 'E', 'W') : null;
   const orbPeriod = altKm
     ? ((2 * Math.PI * Math.sqrt(Math.pow((6371 + altKm) * 1000, 3) / 3.986e14)) / 60).toFixed(1)
     : null;
@@ -505,14 +485,9 @@ const DigitalTwin = () => {
         navigationHelpButton={false}
         timeline={false}
         animation={false}
-        skyBox={false}
-        skyAtmosphere={false}
         requestRenderMode={false}
         backgroundColor={Cesium.Color.BLACK}
-        imageryProvider={imageryProviderRef.current}
-        terrainProvider={terrainProviderRef.current}
       >
-        {/* Live satellite dot + label */}
         <Entity
           name={satellite.name}
           position={Cesium.Cartesian3.fromRadians(
@@ -546,8 +521,7 @@ const DigitalTwin = () => {
       <div
         className="pointer-events-none absolute inset-0 z-10"
         style={{
-          background:
-            'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px)',
+          background: 'repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px)',
         }}
       />
 
@@ -565,7 +539,6 @@ const DigitalTwin = () => {
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <div className="absolute top-0 left-0 right-0 z-30 px-5 pt-3.5 pb-3 flex items-center justify-between">
-        {/* Left */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <StatusDot active />
@@ -577,7 +550,6 @@ const DigitalTwin = () => {
           <span className="text-[9px] tracking-[0.18em] text-slate-600 uppercase font-mono">Mission Control</span>
         </div>
 
-        {/* Centre */}
         <div className="absolute left-1/2 -translate-x-1/2 text-center">
           <div className="text-xs font-bold text-white tracking-[0.15em] uppercase font-mono">
             {satellite.name}
@@ -587,7 +559,6 @@ const DigitalTwin = () => {
           </div>
         </div>
 
-        {/* Right */}
         <div className="flex items-center gap-4">
           <DataBlock label="UTC"     value={clockStr} accent="text-cyan-300" />
           <VRule />
@@ -622,24 +593,15 @@ const DigitalTwin = () => {
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <div
-                className="h-px flex-shrink-0"
-                style={{ width: 20, background: 'rgba(34,211,238,0.65)', boxShadow: '0 0 4px rgba(34,211,238,0.4)' }}
-              />
+              <div className="h-px flex-shrink-0" style={{ width: 20, background: 'rgba(34,211,238,0.65)', boxShadow: '0 0 4px rgba(34,211,238,0.4)' }} />
               <span className="text-[8px] text-slate-500 font-mono">Next orbit</span>
             </div>
             <div className="flex items-center gap-2">
-              <div
-                className="h-px flex-shrink-0"
-                style={{ width: 20, background: 'rgba(34,211,238,0.18)' }}
-              />
-              <span className="text-[8px] text-slate-600 font-mono">Past 15 min</span>
+              <div className="h-px flex-shrink-0" style={{ width: 20, background: 'rgba(251,191,36,0.75)', boxShadow: '0 0 4px rgba(251,191,36,0.4)' }} />
+              <span className="text-[8px] text-slate-500 font-mono">Past 15 min</span>
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <div
-                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{ background: '#34d399' }}
-              />
+              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#34d399' }} />
               <span className="text-[8px] text-slate-500 font-mono">Current position</span>
             </div>
           </div>
@@ -648,7 +610,6 @@ const DigitalTwin = () => {
 
       {/* ── Right panel: Orbital params + upcoming ───────────────────────── */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2" style={{ width: 176 }}>
-
         {(inclination || eccentricity || perigee || apogee || orbitType) && (
           <Panel>
             <PanelTitle>Orbital Parameters</PanelTitle>
@@ -670,11 +631,7 @@ const DigitalTwin = () => {
                 <span className="text-[9px] text-slate-600 font-mono">{mod}</span>
                 <span
                   className="text-[7px] tracking-widest px-1.5 py-0.5 rounded font-mono"
-                  style={{
-                    background: 'rgba(34,211,238,0.05)',
-                    color:      'rgba(34,211,238,0.3)',
-                    border:     '1px solid rgba(34,211,238,0.08)',
-                  }}
+                  style={{ background: 'rgba(34,211,238,0.05)', color: 'rgba(34,211,238,0.3)', border: '1px solid rgba(34,211,238,0.08)' }}
                 >
                   SOON
                 </span>
@@ -682,6 +639,31 @@ const DigitalTwin = () => {
             ))}
           </div>
         </Panel>
+
+        {/* Ground stations indicator */}
+        <div
+          className="rounded px-3 py-2.5"
+          style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(34,211,238,0.14)', backdropFilter: 'blur(12px)' }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[8px] tracking-[0.28em] text-cyan-700 uppercase mb-0.5 font-mono">Ground Stations</div>
+              <div className="text-xs font-bold text-white font-mono">
+                {stations.length}
+                <span className="text-[9px] font-normal text-slate-600 ml-1">configured</span>
+              </div>
+            </div>
+            <Link
+              to="/ground-stations"
+              className="text-[8px] tracking-widest uppercase font-mono transition-colors px-2 py-1 rounded"
+              style={{ border: '1px solid rgba(30,41,59,0.7)', color: '#334155' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#22d3ee')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#334155')}
+            >
+              Manage →
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* ── Bottom bar ───────────────────────────────────────────────────── */}
@@ -700,6 +682,17 @@ const DigitalTwin = () => {
         {/* Centre controls */}
         <div className="flex items-center gap-2">
 
+          {/* Maneuver Sandbox */}
+          <Link
+            to={`/satellite/${noradId}/maneuver`}
+            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
+            style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.28)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)')}
+          >
+            ◎ Maneuver Sandbox
+          </Link>
+
           {/* 3D / 2D toggle */}
           <button
             onClick={handleToggleView}
@@ -713,12 +706,8 @@ const DigitalTwin = () => {
               border: '1px solid rgba(148,163,184,0.15)',
               color: '#64748b',
             }}
-            onMouseEnter={e => {
-              if (viewMode === '3d') e.currentTarget.style.color = '#94a3b8';
-            }}
-            onMouseLeave={e => {
-              if (viewMode === '3d') e.currentTarget.style.color = '#64748b';
-            }}
+            onMouseEnter={e => { if (viewMode === '3d') e.currentTarget.style.color = '#94a3b8'; }}
+            onMouseLeave={e => { if (viewMode === '3d') e.currentTarget.style.color = '#64748b'; }}
           >
             {viewMode === '3d' ? '⊞ Ground Track View' : '⊙ 3D Globe View'}
           </button>
@@ -727,34 +716,26 @@ const DigitalTwin = () => {
           <button
             onClick={handleTrackSat}
             className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
-            style={{
-              background: 'rgba(6,78,59,0.55)',
-              border: '1px solid rgba(52,211,153,0.28)',
-              color: '#34d399',
-            }}
+            style={{ background: 'rgba(6,78,59,0.55)', border: '1px solid rgba(52,211,153,0.28)', color: '#34d399' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(6,78,59,0.85)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'rgba(6,78,59,0.55)')}
           >
             ⌖ Track Satellite
           </button>
 
-          {/* Reset view */}
+          {/* Center view */}
           <button
-            onClick={handleResetView}
+            onClick={handleCenterView}
             className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
-            style={{
-              background: 'rgba(2,6,15,0.85)',
-              border: '1px solid rgba(148,163,184,0.1)',
-              color: '#64748b',
-            }}
+            style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(148,163,184,0.1)', color: '#64748b' }}
             onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
             onMouseLeave={e => (e.currentTarget.style.color = '#64748b')}
           >
-            ⊙ Reset View
+            ⊕ Center View
           </button>
         </div>
 
-        {/* Propagation badge + view mode indicator */}
+        {/* Propagation badge */}
         <div
           className="px-3 py-2 rounded text-right"
           style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(148,163,184,0.07)' }}
