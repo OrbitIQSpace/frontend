@@ -1,8 +1,5 @@
 // src/pages/Landing.js
-import React, { useEffect, useState } from 'react';
-import { getSatelliteInfo } from 'tle.js';
-import SatelliteMap from '../components/SatelliteMap';
-import axios from '../api';
+import React, { useState } from 'react';
 
 // ── Tiny animation helper — staggered fade-in on mount ───────────────────────
 const Reveal = ({ children, delay = 0, className = '' }) => (
@@ -18,61 +15,103 @@ const Reveal = ({ children, delay = 0, className = '' }) => (
   </div>
 );
 
+// ── Terminal-style data row ───────────────────────────────────────────────────
+const DataRow = ({ label, value, unit, color = '#22d3ee', dimmed = false }) => (
+  <div
+    className="flex justify-between items-center py-2 px-3"
+    style={{ borderBottom: '1px solid rgba(30,41,59,0.4)' }}
+  >
+    <span
+      className="font-mono uppercase"
+      style={{ fontSize: '8px', letterSpacing: '0.25em', color: '#334155' }}
+    >
+      {label}
+    </span>
+    <span
+      className="font-mono font-bold text-xs"
+      style={{ color: dimmed ? '#1e3a5f' : color }}
+    >
+      {value}
+      {unit && <span style={{ color: '#475569', fontWeight: 400, marginLeft: 3 }}>{unit}</span>}
+    </span>
+  </div>
+);
+
+// ── Terminal-style card panel ─────────────────────────────────────────────────
+const DataPanel = ({ label, children, accent = '#22d3ee', className = '' }) => (
+  <div
+    className={`rounded-xl overflow-hidden relative ${className}`}
+    style={{
+      background: 'rgba(2,6,23,0.8)',
+      border: '1px solid rgba(30,41,59,0.8)',
+    }}
+  >
+    {/* Top bar */}
+    <div
+      className="flex items-center justify-between px-4 py-2.5"
+      style={{
+        background: 'rgba(2,6,23,0.95)',
+        borderBottom: '1px solid rgba(30,41,59,0.6)',
+      }}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#1e3a5f' }} />
+        <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#1e3a5f' }} />
+        <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#1e3a5f' }} />
+      </div>
+      <span
+        className="font-mono uppercase absolute left-1/2 -translate-x-1/2"
+        style={{ fontSize: '8px', letterSpacing: '0.3em', color: accent }}
+      >
+        {label}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: accent }} />
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: accent }} />
+        </span>
+        <span className="font-mono" style={{ fontSize: '8px', color: '#334155' }}>LIVE</span>
+      </div>
+    </div>
+    {/* Body */}
+    <div className="relative">
+      <div className="scan-line" />
+      {children}
+    </div>
+  </div>
+);
+
+// ── Quick stats pill badge ────────────────────────────────────────────────────
+const StatBadge = ({ label, color = '#22d3ee' }) => (
+  <span
+    className="px-4 py-2 rounded-lg font-mono uppercase"
+    style={{
+      fontSize: '9px',
+      letterSpacing: '0.25em',
+      background: 'rgba(2,6,23,0.6)',
+      border: `1px solid ${color}25`,
+      color,
+    }}
+  >
+    {label}
+  </span>
+);
+
+// ── Capabilities data ─────────────────────────────────────────────────────────
+const capabilities = [
+  { title: 'Real-Time Tracking',  color: '#34d399', spec: 'SGP4 · 3s position update · lat/lng/alt' },
+  { title: 'Orbital Analysis',    color: '#22d3ee', spec: 'TLE history · apogee/perigee drift · eccentricity · B*' },
+  { title: 'System Health',       color: '#a78bfa', spec: 'CSV telemetry · battery charting · subsystem trends' },
+  { title: 'Mission Control',     color: '#f97316', spec: '3D Cesium globe · state vector · orbital params' },
+  { title: 'Reboost Planner',     color: '#f97316', spec: '90-day decay · Hohmann Δv · Tsiolkovsky fuel · 7-day scan' },
+  { title: 'Maneuver Sandbox',    color: '#818cf8', spec: 'First-order burn sim · prograde/retro/radial · Δv slider' },
+];
+
+// ── Main component ────────────────────────────────────────────────────────────
 const Landing = () => {
-  const [issPosition, setIssPosition]   = useState(null);
-  const [issTle, setIssTle]             = useState(null);
-  const [loadingTle, setLoadingTle]     = useState(true);
-  const [issCoords, setIssCoords]       = useState({ lat: '—', lng: '—', alt: '—' });
+  const [formData, setFormData]   = useState({ name: '', company: '', message: '' });
+  const [formStatus, setFormStatus] = useState('');
 
-  const [formData, setFormData] = useState({ name: '', company: '', message: '' });
-  const [formStatus, setFormStatus] = useState(''); // sending | success | error
-
-  // ── Fetch live ISS TLE ────────────────────────────────────────────────────
-  useEffect(() => {
-    const fetchIssTle = async () => {
-      try {
-        const res = await axios.get('/api/public/iss');
-        if (res.data?.line1 && res.data?.line2) {
-          setIssTle(res.data);
-        } else throw new Error('bad TLE');
-      } catch {
-        setIssTle({
-          name: 'ISS (ZARYA)',
-          line1: '1 25544U 98067A   25360.53473604  .00013978  00000-0  25382-3 0  9999',
-          line2: '2 25544  51.6320  74.1581 0003231 305.5588  54.5099 15.49844261544995',
-        });
-      } finally {
-        setLoadingTle(false);
-      }
-    };
-    fetchIssTle();
-  }, []);
-
-  // ── SGP4 live position tick ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!issTle || loadingTle) return;
-    const tle = [issTle.line1.trim(), issTle.line2.trim()];
-
-    const tick = () => {
-      try {
-        const info = getSatelliteInfo(tle, Date.now());
-        if (info && typeof info.lat === 'number') {
-          setIssPosition({ lat: info.lat, lng: info.lng, altitude: Math.round(info.height || 420) });
-          setIssCoords({
-            lat: info.lat >= 0 ? `${info.lat.toFixed(4)}° N` : `${Math.abs(info.lat).toFixed(4)}° S`,
-            lng: info.lng >= 0 ? `${info.lng.toFixed(4)}° E` : `${Math.abs(info.lng).toFixed(4)}° W`,
-            alt: `${Math.round(info.height || 420)} km`,
-          });
-        }
-      } catch {}
-    };
-
-    tick();
-    const id = setInterval(tick, 3000);
-    return () => clearInterval(id);
-  }, [issTle, loadingTle]);
-
-  // ── Contact form ──────────────────────────────────────────────────────────
   const handleFormSubmit = (e) => {
     e.preventDefault();
     setFormStatus('sending');
@@ -88,66 +127,6 @@ const Landing = () => {
   };
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  // ── Capability cards ──────────────────────────────────────────────────────
-  const capabilities = [
-    {
-      label: 'Live Now',
-      title: 'Real-Time Tracking',
-      body: 'SGP4-propagated position updated every 3 seconds. Lat, lng, altitude — always current.',
-      color: '#34d399',
-      live: true,
-    },
-    {
-      label: 'Live Now',
-      title: 'Orbital Analysis',
-      body: 'TLE history charts showing apogee/perigee drift, eccentricity trends, and decay rate over time.',
-      color: '#38bdf8',
-      live: true,
-    },
-    {
-      label: 'Live Now',
-      title: 'System Health',
-      body: 'Upload telemetry CSV packets to visualize battery and subsystem health across your mission.',
-      color: '#a78bfa',
-      live: true,
-    },
-    {
-      label: 'Live Now',
-      title: 'Mission Control',
-      body: '3D globe viewer with live satellite position, state vector, and orbital parameters in one screen.',
-      color: '#fb923c',
-      live: true,
-    },
-    {
-      label: 'Coming Soon',
-      title: 'Decay Prediction',
-      body: 'Model atmospheric drag and ballistic coefficient to forecast re-entry window months in advance.',
-      color: '#f43f5e',
-      live: false,
-    },
-    {
-      label: 'Coming Soon',
-      title: 'Reboost Planning',
-      body: 'Calculate optimal ΔV maneuvers and timing windows to restore target orbit altitude.',
-      color: '#f59e0b',
-      live: false,
-    },
-    {
-      label: 'Coming Soon',
-      title: 'Orbit Simulation',
-      body: 'Full numerical propagation with perturbation models — J2, drag, SRP — for high-fidelity planning.',
-      color: '#22d3ee',
-      live: false,
-    },
-    {
-      label: 'Coming Soon',
-      title: 'ΔV Optimizer',
-      body: 'Multi-objective optimizer that minimizes fuel burn while meeting orbit maintenance constraints.',
-      color: '#34d399',
-      live: false,
-    },
-  ];
 
   return (
     <div
@@ -172,6 +151,14 @@ const Landing = () => {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
         }
+        @keyframes blink-cursor {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0; }
+        }
+        @keyframes scan {
+          from { transform: translateY(-100%); }
+          to   { transform: translateY(100vh); }
+        }
         .orbit-ring {
           animation: orbit-spin 18s linear infinite;
           transform-origin: center;
@@ -186,6 +173,25 @@ const Landing = () => {
             linear-gradient(90deg, rgba(34,211,238,0.025) 1px, transparent 1px);
           background-size: 48px 48px;
         }
+        .terminal-cursor {
+          display: inline-block;
+          width: 7px;
+          height: 13px;
+          background: #22d3ee;
+          animation: blink-cursor 1s step-end infinite;
+          vertical-align: middle;
+          margin-left: 3px;
+        }
+        .scan-line {
+          position: absolute;
+          width: 100%;
+          height: 2px;
+          background: linear-gradient(transparent, rgba(34,211,238,0.08), transparent);
+          animation: scan 4s linear infinite;
+          pointer-events: none;
+          z-index: 0;
+          top: 0;
+        }
         input::placeholder, textarea::placeholder { color: #334155; }
         input:focus, textarea:focus {
           outline: none;
@@ -198,7 +204,7 @@ const Landing = () => {
       ════════════════════════════════════════════════════════════════════ */}
       <section className="relative min-h-screen flex flex-col justify-center grid-bg overflow-hidden pt-28 pb-20 px-6">
 
-        {/* Radial glow behind hero text */}
+        {/* Radial glow */}
         <div
           className="pointer-events-none absolute inset-0 z-0"
           style={{
@@ -206,7 +212,7 @@ const Landing = () => {
           }}
         />
 
-        {/* Animated orbit rings — decorative */}
+        {/* Animated orbit rings */}
         <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center opacity-20">
           <svg width="800" height="800" viewBox="0 0 800 800">
             <ellipse cx="400" cy="400" rx="320" ry="120" fill="none" stroke="#22d3ee" strokeWidth="0.8" strokeDasharray="6 8" className="orbit-ring" />
@@ -220,10 +226,7 @@ const Landing = () => {
           <div className="max-w-4xl">
 
             <Reveal delay={0}>
-              <p
-                className="text-[9px] tracking-[0.35em] uppercase mb-6"
-                style={{ color: '#0891b2' }}
-              >
+              <p className="text-[9px] tracking-[0.35em] uppercase mb-6" style={{ color: '#0891b2' }}>
                 Satellite Operations Intelligence
               </p>
             </Reveal>
@@ -244,16 +247,10 @@ const Landing = () => {
             </Reveal>
 
             <Reveal delay={220}>
-              <p
-                className="text-lg mb-4 max-w-2xl leading-relaxed"
-                style={{ color: '#64748b' }}
-              >
+              <p className="text-lg mb-4 max-w-2xl leading-relaxed" style={{ color: '#64748b' }}>
                 Satellites have a finite lifespan. Atmospheric drag, orbital decay, and unplanned fuel burns eat into mission time every day.
               </p>
-              <p
-                className="text-lg mb-10 max-w-2xl leading-relaxed"
-                style={{ color: '#94a3b8' }}
-              >
+              <p className="text-lg mb-10 max-w-2xl leading-relaxed" style={{ color: '#94a3b8' }}>
                 OrbitIQ gives operators the intelligence to track degradation, predict decay, and execute precision reboost maneuvers — extending satellite lifespan and maximising mission ROI.
               </p>
             </Reveal>
@@ -274,7 +271,7 @@ const Landing = () => {
                   Request Access
                 </a>
                 <a
-                  href="#demo"
+                  href="#showcase"
                   className="px-8 py-3.5 rounded-lg font-bold text-sm tracking-widest uppercase transition-all"
                   style={{
                     background: 'transparent',
@@ -284,8 +281,16 @@ const Landing = () => {
                   onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
                   onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
                 >
-                  See Live Demo ↓
+                  See the Platform ↓
                 </a>
+              </div>
+
+              {/* Quick stats strip */}
+              <div className="mt-8 flex flex-wrap gap-2">
+                <StatBadge label="SGP4 Propagation · 3s" color="#22d3ee" />
+                <StatBadge label="Hohmann Transfer Δv"   color="#f97316" />
+                <StatBadge label="90-Day Decay Forecast" color="#34d399" />
+                <StatBadge label="7-Day Burn Windows"    color="#22d3ee" />
               </div>
             </Reveal>
 
@@ -314,83 +319,372 @@ const Landing = () => {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          LIVE ISS DEMO
+          FEATURE SHOWCASE
       ════════════════════════════════════════════════════════════════════ */}
-      <section id="demo" className="px-6 py-24">
+      <section
+        id="showcase"
+        className="px-6 py-24"
+        style={{ borderTop: '1px solid rgba(30,41,59,0.5)' }}
+      >
         <div className="max-w-7xl mx-auto">
 
-          {/* Section label */}
           <div className="mb-10">
             <p className="text-[9px] tracking-[0.3em] uppercase mb-3" style={{ color: '#0891b2' }}>
-              Live Demo · International Space Station
+              Platform · Feature Showcase
             </p>
             <h2
               className="font-black uppercase italic leading-none"
               style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', color: 'white', letterSpacing: '-0.02em' }}
             >
-              Your satellites, tracked in real time.
+              The full picture. Every orbit.
             </h2>
             <p className="mt-3 text-sm max-w-xl" style={{ color: '#64748b' }}>
-              Live SGP4 propagation from Space-Track TLE data. Position updates every 3 seconds.
+              Six integrated modules covering every phase of LEO satellite operations.
             </p>
           </div>
 
-          {/* Map + live stat strip */}
-          <div className="relative rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(30,41,59,0.7)' }}>
+          {/* 2-column grid: left has 2 stacked panels, right has 1 tall panel */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            {/* Live coordinate strip */}
-            <div
-              className="flex items-center justify-between px-6 py-3"
-              style={{
-                background: 'rgba(2,6,23,0.95)',
-                borderBottom: '1px solid rgba(30,41,59,0.7)',
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-                </span>
-                <span className="text-[9px] tracking-[0.2em] uppercase font-mono" style={{ color: '#34d399' }}>
-                  {issTle?.name || 'ISS (ZARYA)'}
-                </span>
-              </div>
-              <div className="flex items-center gap-8">
-                {[
-                  { label: 'Lat', value: issCoords.lat },
-                  { label: 'Lng', value: issCoords.lng },
-                  { label: 'Alt', value: issCoords.alt },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <span className="text-[8px] tracking-[0.2em] uppercase font-mono" style={{ color: '#334155' }}>{label}</span>
-                    <span className="text-xs font-bold font-mono text-white">{value}</span>
-                  </div>
-                ))}
-              </div>
-              <span className="text-[8px] tracking-[0.2em] uppercase font-mono" style={{ color: '#1e3a5f' }}>SGP4 / TLE</span>
-            </div>
+            {/* Left column */}
+            <div className="flex flex-col gap-4">
 
-            {/* Map */}
-            <div style={{ height: 560 }}>
-              {issPosition ? (
-                <SatelliteMap position={issPosition} satelliteName={issTle?.name || 'ISS (ZARYA)'} />
-              ) : (
-                <div
-                  className="h-full flex items-center justify-center"
-                  style={{ background: 'rgba(2,6,23,0.9)' }}
-                >
-                  <p className="text-[9px] tracking-[0.3em] uppercase font-mono animate-pulse" style={{ color: '#0891b2' }}>
-                    Establishing ground link…
+              {/* Panel A — Mission Control + Orbital Analysis */}
+              <DataPanel label="Mission Control · Orbital Analysis" accent="#22d3ee">
+                {/* State vector */}
+                <div className="px-4 pt-4 pb-2">
+                  <p
+                    className="font-mono uppercase mb-2"
+                    style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#0891b2' }}
+                  >
+                    State Vector · UTC 14:32:07
                   </p>
                 </div>
-              )}
-            </div>
-          </div>
+                <DataRow label="Lat"      value="51.6420"  unit="° N"  color="#22d3ee" />
+                <DataRow label="Lng"      value="142.8814" unit="° E"  color="#22d3ee" />
+                <DataRow label="Alt"      value="421.3"    unit="km"   color="#34d399" />
+                <DataRow label="Velocity" value="7.662"    unit="km/s" color="white" />
+                <DataRow label="Period"   value="92.7"     unit="min"  color="white" />
+                <DataRow label="Inc"      value="51.64"    unit="°"    color="white" />
+                <div className="px-3 py-2">
+                  <span className="font-mono" style={{ fontSize: '8px', color: '#1e3a5f' }}>
+                    NORAD 25544 · ISS (ZARYA) · SGP4
+                  </span>
+                </div>
+
+                {/* Divider */}
+                <div
+                  className="flex items-center gap-3 px-4 py-2"
+                  style={{ borderTop: '1px solid rgba(30,41,59,0.6)', borderBottom: '1px solid rgba(30,41,59,0.6)' }}
+                >
+                  <div className="flex-1 h-px" style={{ background: 'rgba(30,41,59,0.4)' }} />
+                  <span className="font-mono uppercase" style={{ fontSize: '7px', letterSpacing: '0.3em', color: '#1e3a5f' }}>
+                    Orbital Analysis
+                  </span>
+                  <div className="flex-1 h-px" style={{ background: 'rgba(30,41,59,0.4)' }} />
+                </div>
+
+                {/* Sparkline SVG */}
+                <div className="px-4 pt-3 pb-1">
+                  <svg viewBox="0 0 280 60" width="100%" height="60" style={{ overflow: 'visible' }}>
+                    {/* Grid lines */}
+                    {[12, 25, 38, 51].map(y => (
+                      <line key={y} x1="0" y1={y} x2="280" y2={y} stroke="rgba(30,41,59,0.4)" strokeWidth="0.5" />
+                    ))}
+                    {/* Apogee line — gentle downward slope */}
+                    <polyline
+                      points="0,8 40,11 80,13 120,16 160,19 200,22 240,25 280,28"
+                      fill="none" stroke="#22d3ee" strokeWidth="1.2" opacity="0.7"
+                    />
+                    {/* Perigee line — slightly lower */}
+                    <polyline
+                      points="0,18 40,21 80,24 120,27 160,30 200,33 240,36 280,39"
+                      fill="none" stroke="#f97316" strokeWidth="1.2" opacity="0.7"
+                    />
+                    {/* End dots */}
+                    <circle cx="280" cy="28" r="2" fill="#22d3ee" />
+                    <circle cx="280" cy="39" r="2" fill="#f97316" />
+                  </svg>
+                </div>
+
+                {/* Legend */}
+                <div className="flex items-center gap-6 px-4 pb-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-0.5 inline-block rounded-full" style={{ background: '#22d3ee' }} />
+                    <span className="font-mono" style={{ fontSize: '8px', color: '#22d3ee' }}>Apogee · 421.3 km</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-0.5 inline-block rounded-full" style={{ background: '#f97316' }} />
+                    <span className="font-mono" style={{ fontSize: '8px', color: '#f97316' }}>Perigee · 407.2 km</span>
+                  </div>
+                </div>
+              </DataPanel>
+
+              {/* Panel C — Maneuver Sandbox */}
+              <DataPanel label="Maneuver Sandbox" accent="#818cf8">
+                <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'rgba(30,41,59,0.4)' }}>
+
+                  {/* Left — Burn Parameters */}
+                  <div className="p-4">
+                    <p className="font-mono uppercase mb-4" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#818cf8' }}>
+                      Burn Parameters
+                    </p>
+
+                    {/* Burn Time */}
+                    <div className="mb-4">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-mono" style={{ fontSize: '8px', color: '#334155', letterSpacing: '0.2em' }}>BURN TIME</span>
+                        <span className="font-mono font-bold" style={{ fontSize: '9px', color: '#818cf8' }}>T+45 min</span>
+                      </div>
+                      <div className="w-full h-1 rounded-full" style={{ background: 'rgba(30,41,59,0.6)' }}>
+                        <div className="h-1 rounded-full" style={{ width: '37%', background: 'rgba(129,140,248,0.5)' }} />
+                      </div>
+                    </div>
+
+                    {/* Δv Magnitude */}
+                    <div className="mb-4">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-mono" style={{ fontSize: '8px', color: '#334155', letterSpacing: '0.2em' }}>Δv MAG</span>
+                        <span className="font-mono font-bold" style={{ fontSize: '9px', color: '#818cf8' }}>28 m/s</span>
+                      </div>
+                      <div className="w-full h-1 rounded-full" style={{ background: 'rgba(30,41,59,0.6)' }}>
+                        <div className="h-1 rounded-full" style={{ width: '28%', background: 'rgba(129,140,248,0.5)' }} />
+                      </div>
+                    </div>
+
+                    {/* Direction pills */}
+                    <div className="mb-4">
+                      <span className="font-mono block mb-2" style={{ fontSize: '8px', color: '#334155', letterSpacing: '0.2em' }}>DIRECTION</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {[
+                          { label: 'PRO',   active: true },
+                          { label: 'RETRO', active: false },
+                          { label: 'RAD+',  active: false },
+                          { label: 'RAD-',  active: false },
+                        ].map(({ label, active }) => (
+                          <span
+                            key={label}
+                            className="px-2 py-0.5 rounded font-mono"
+                            style={{
+                              fontSize: '8px',
+                              background: active ? 'rgba(129,140,248,0.2)' : 'transparent',
+                              border: active ? '1px solid rgba(129,140,248,0.5)' : '1px solid rgba(30,41,59,0.5)',
+                              color: active ? '#818cf8' : '#334155',
+                            }}
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <DataRow label="Fuel Cost" value="2.1" unit="kg" color="#818cf8" />
+                  </div>
+
+                  {/* Right — Predicted Result */}
+                  <div className="p-4">
+                    <p className="font-mono uppercase mb-4" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#818cf8' }}>
+                      Predicted Result
+                    </p>
+                    <DataRow label="New Apogee"   value="+31 km"    color="#34d399" />
+                    <DataRow label="New Perigee"  value="+28 km"    color="#34d399" />
+                    <DataRow label="Period Δ"     value="+0.8 min"  color="white" />
+                    <DataRow label="Eccentricity" value="0.00041"   color="white" />
+                    <DataRow label="New Orbit"    value="449×435 km" color="#818cf8" />
+
+                    {/* Mini orbit diagram */}
+                    <div className="mt-3">
+                      <svg viewBox="0 0 140 80" width="100%" height="70">
+                        {/* Current orbit */}
+                        <ellipse cx="70" cy="40" rx="52" ry="28" fill="none" stroke="#22d3ee" strokeWidth="1" opacity="0.4" />
+                        {/* Post-burn orbit */}
+                        <ellipse cx="70" cy="40" rx="60" ry="34" fill="none" stroke="#ef4444" strokeWidth="1" opacity="0.6" strokeDasharray="3 3" />
+                        {/* Center body */}
+                        <circle cx="70" cy="40" r="5" fill="rgba(2,6,23,0.9)" stroke="rgba(34,211,238,0.3)" strokeWidth="0.5" />
+                        <circle cx="70" cy="40" r="3" fill="#22d3ee" opacity="0.6" />
+                        {/* Burn point */}
+                        <circle cx="122" cy="40" r="2.5" fill="#f97316" opacity="0.8" />
+                        {/* Labels */}
+                        <text x="20" y="68" fill="#475569" fontSize="6" fontFamily="monospace">CURRENT</text>
+                        <text x="80" y="14" fill="#ef444470" fontSize="6" fontFamily="monospace">POST-BURN</text>
+                      </svg>
+                    </div>
+                  </div>
+
+                </div>
+              </DataPanel>
+
+            </div>{/* end left column */}
+
+            {/* Right column — Reboost Planner (full height) */}
+            <DataPanel label="Reboost Planner" accent="#f97316" className="lg:row-span-2">
+
+              {/* Sub-section 1 — Header */}
+              <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(30,41,59,0.5)' }}>
+                <p className="font-mono uppercase mb-1" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#f97316' }}>
+                  90-Day Altitude Forecast · Active
+                </p>
+                <p className="font-mono" style={{ fontSize: '8px', color: '#1e3a5f' }}>
+                  SATELLITE: DEMO-SAT-1 · NORAD: 55XXX · ORBIT: LEO 418km
+                </p>
+              </div>
+
+              {/* Sub-section 2 — Decay Chart */}
+              <div className="px-4 pt-4 pb-2" style={{ borderBottom: '1px solid rgba(30,41,59,0.5)' }}>
+                <svg viewBox="0 0 320 100" width="100%" height="100">
+                  {/* Background tint */}
+                  <rect x="0" y="0" width="320" height="100" fill="rgba(249,115,22,0.02)" />
+
+                  {/* Grid lines */}
+                  {[10, 30, 50, 70, 90].map(y => (
+                    <line key={y} x1="32" y1={y} x2="320" y2={y} stroke="rgba(30,41,59,0.35)" strokeWidth="0.5" />
+                  ))}
+
+                  {/* Y-axis labels */}
+                  {[
+                    { y: 10, label: '420' },
+                    { y: 30, label: '415' },
+                    { y: 50, label: '410' },
+                    { y: 70, label: '405' },
+                    { y: 90, label: '400' },
+                  ].map(({ y, label }) => (
+                    <text key={label} x="28" y={y + 3} fill="#334155" fontSize="7" fontFamily="monospace" textAnchor="end">{label}</text>
+                  ))}
+
+                  {/* Reboost recommended zone */}
+                  <rect x="32" y="72" width="288" height="28" fill="rgba(249,115,22,0.06)" />
+                  <text x="36" y="88" fill="#f9731640" fontSize="7" fontFamily="monospace">REBOOST RECOMMENDED</text>
+
+                  {/* Minimum safe altitude line */}
+                  <line x1="32" y1="90" x2="320" y2="90" stroke="rgba(239,68,68,0.4)" strokeWidth="0.8" strokeDasharray="4 3" />
+
+                  {/* Main decay curve (bezier) */}
+                  <path
+                    d="M 32,12 C 80,14 140,20 200,32 S 280,55 320,72"
+                    fill="none" stroke="#f97316" strokeWidth="1.5"
+                  />
+
+                  {/* Current position dot */}
+                  <circle cx="32" cy="12" r="3" fill="#f97316" />
+
+                  {/* Projected end dot */}
+                  <circle cx="320" cy="72" r="2" fill="rgba(239,68,68,0.7)" />
+                </svg>
+
+                {/* X-axis label */}
+                <p className="font-mono text-center" style={{ fontSize: '7px', color: '#334155', letterSpacing: '0.1em' }}>
+                  NOW · · · · · · · · · · · · · DAY 30 · · · · · · · · · · · DAY 60 · · · · · · · · DAY 90
+                </p>
+              </div>
+
+              {/* Sub-section 3 — Hohmann Calculator */}
+              <div className="px-4 py-4" style={{ borderBottom: '1px solid rgba(30,41,59,0.5)' }}>
+                <p className="font-mono uppercase mb-3" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#f97316' }}>
+                  Hohmann Transfer · Δv Budget
+                </p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  {/* Current orbit */}
+                  <div>
+                    <p className="font-mono uppercase mb-2" style={{ fontSize: '7px', letterSpacing: '0.2em', color: '#475569' }}>Current Orbit</p>
+                    <DataRow label="Apogee"    value="421.3"  unit="km"  color="#22d3ee" />
+                    <DataRow label="Perigee"   value="407.2"  unit="km"  color="#22d3ee" />
+                    <DataRow label="Semi-major a" value="6,785" unit="km" color="white" />
+                  </div>
+                  {/* Target orbit */}
+                  <div>
+                    <p className="font-mono uppercase mb-2" style={{ fontSize: '7px', letterSpacing: '0.2em', color: '#475569' }}>Target Orbit</p>
+                    <DataRow label="Target Alt" value="450"    unit="km"   color="#f97316" />
+                    <DataRow label="Δv₁"        value="+12.4"  unit="m/s"  color="#f97316" />
+                    <DataRow label="Δv₂"        value="+11.8"  unit="m/s"  color="#f97316" />
+                  </div>
+                </div>
+
+                {/* Result row */}
+                <div
+                  className="rounded-lg px-3 py-3 flex items-center justify-between"
+                  style={{
+                    background: 'rgba(249,115,22,0.08)',
+                    border: '1px solid rgba(249,115,22,0.2)',
+                  }}
+                >
+                  <div>
+                    <p className="font-mono uppercase" style={{ fontSize: '7px', letterSpacing: '0.2em', color: '#94a3b8' }}>Total Δv</p>
+                    <p className="font-mono font-bold text-sm" style={{ color: '#f97316' }}>24.2 m/s</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono uppercase" style={{ fontSize: '7px', letterSpacing: '0.2em', color: '#94a3b8' }}>Fuel Cost</p>
+                    <p className="font-mono font-bold text-sm" style={{ color: '#f97316' }}>1.8 kg</p>
+                  </div>
+                  <div className="absolute" style={{ display: 'none' }} />
+                </div>
+                <p className="font-mono mt-2" style={{ fontSize: '7px', color: '#334155' }}>
+                  Based on 80kg wet mass · Isp 220s
+                </p>
+              </div>
+
+              {/* Sub-section 4 — Burn Window Scanner */}
+              <div className="px-4 py-4">
+                <p className="font-mono uppercase mb-3" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#f97316' }}>
+                  7-Day Burn Window Scan
+                </p>
+
+                {[
+                  { date: 'MAR 14 · 09:42 UTC', dur: '4.2 min', dv: '24.2 m/s', status: 'OPTIMAL',  statusColor: '#34d399', pulse: true },
+                  { date: 'MAR 15 · 11:18 UTC', dur: '3.8 min', dv: '25.1 m/s', status: 'GOOD',     statusColor: '#22d3ee', pulse: false },
+                  { date: 'MAR 16 · 08:55 UTC', dur: '2.1 min', dv: '27.6 m/s', status: 'MARGINAL', statusColor: '#f97316', pulse: false },
+                  { date: 'MAR 18 · 14:03 UTC', dur: '4.6 min', dv: '24.0 m/s', status: 'GOOD',     statusColor: '#22d3ee', pulse: false },
+                ].map((w, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between rounded-lg mb-1.5 px-3 py-2"
+                    style={{
+                      background: 'rgba(2,6,23,0.6)',
+                      border: '1px solid rgba(30,41,59,0.5)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {w.pulse ? (
+                        <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: w.statusColor }} />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: w.statusColor }} />
+                        </span>
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: w.statusColor, opacity: 0.6 }} />
+                      )}
+                      <span className="font-mono" style={{ fontSize: '9px', color: '#64748b' }}>{w.date}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono" style={{ fontSize: '8px', color: '#475569' }}>{w.dur}</span>
+                      <span className="font-mono font-bold" style={{ fontSize: '9px', color: '#94a3b8' }}>{w.dv}</span>
+                      <span
+                        className="px-2 py-0.5 rounded font-mono"
+                        style={{
+                          fontSize: '7px',
+                          letterSpacing: '0.15em',
+                          background: `${w.statusColor}18`,
+                          border: `1px solid ${w.statusColor}40`,
+                          color: w.statusColor,
+                        }}
+                      >
+                        {w.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
+                <p className="font-mono mt-3" style={{ fontSize: '7px', letterSpacing: '0.3em', color: '#0891b2', textTransform: 'uppercase' }}>
+                  Ground contact windows cross-referenced with ground station network
+                </p>
+              </div>
+
+            </DataPanel>
+
+          </div>{/* end 2-col grid */}
         </div>
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          CAPABILITIES GRID
+          HOW IT WORKS
       ════════════════════════════════════════════════════════════════════ */}
       <section
         className="px-6 py-24"
@@ -400,90 +694,246 @@ const Landing = () => {
 
           <div className="mb-14">
             <p className="text-[9px] tracking-[0.3em] uppercase mb-3" style={{ color: '#0891b2' }}>
-              Platform Capabilities
+              Workflow
             </p>
             <h2
               className="font-black uppercase italic leading-none"
               style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', color: 'white', letterSpacing: '-0.02em' }}
             >
-              Built for the full mission lifecycle.
+              Up and running in minutes.
             </h2>
             <p className="mt-3 text-sm max-w-xl" style={{ color: '#64748b' }}>
-              From launch to deorbit — OrbitIQ covers every phase of satellite operations.
+              No orbital mechanics degree required. If you have a NORAD ID, you have everything you need.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {capabilities.map((cap) => (
+          {/* Steps — 5-col on md (step · arrow · step · arrow · step) */}
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto_1fr] gap-4 items-center">
+
+            {/* Step 01 */}
+            <div
+              className="rounded-xl p-6 relative overflow-hidden"
+              style={{
+                background: 'rgba(2,6,23,0.8)',
+                border: '1px solid rgba(30,41,59,0.8)',
+              }}
+            >
+              <span
+                className="font-black italic absolute top-3 right-4 pointer-events-none select-none"
+                style={{ fontSize: '4rem', color: 'rgba(34,211,238,0.06)', lineHeight: 1 }}
+              >
+                01
+              </span>
+              <p className="font-mono uppercase mb-4" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#22d3ee' }}>
+                Add Your Satellite
+              </p>
               <div
-                key={cap.title}
-                className="rounded-xl p-5 transition-all duration-200 group"
+                className="px-3 py-2 rounded-lg mb-4 font-mono text-xs text-white"
                 style={{
-                  background: cap.live ? 'rgba(2,6,23,0.8)' : 'rgba(2,6,23,0.4)',
-                  border: cap.live
-                    ? `1px solid rgba(30,41,59,0.8)`
-                    : '1px dashed rgba(30,41,59,0.5)',
-                }}
-                onMouseEnter={e => {
-                  if (cap.live) e.currentTarget.style.borderColor = `${cap.color}30`;
-                }}
-                onMouseLeave={e => {
-                  if (cap.live) e.currentTarget.style.borderColor = 'rgba(30,41,59,0.8)';
+                  background: 'rgba(2,6,23,0.95)',
+                  border: '1px solid rgba(34,211,238,0.3)',
                 }}
               >
-                {/* Status badge */}
-                <div className="flex items-center gap-1.5 mb-4">
-                  {cap.live ? (
-                    <>
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: cap.color }} />
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: cap.color }} />
-                      </span>
-                      <span className="text-[8px] tracking-[0.2em] uppercase font-mono" style={{ color: cap.color }}>Live</span>
-                    </>
-                  ) : (
-                    <span className="text-[8px] tracking-[0.2em] uppercase font-mono" style={{ color: '#1e3a5f' }}>Coming Soon</span>
-                  )}
+                NORAD ID: 25544<span className="terminal-cursor" />
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                Enter any NORAD catalog number. OrbitIQ fetches the latest TLE from Space-Track and begins propagating position immediately.
+              </p>
+            </div>
+
+            {/* Arrow */}
+            <div className="hidden md:flex items-center justify-center text-xl" style={{ color: '#1e3a5f' }}>→</div>
+
+            {/* Step 02 */}
+            <div
+              className="rounded-xl p-6 relative overflow-hidden"
+              style={{
+                background: 'rgba(2,6,23,0.8)',
+                border: '1px solid rgba(30,41,59,0.8)',
+              }}
+            >
+              <span
+                className="font-black italic absolute top-3 right-4 pointer-events-none select-none"
+                style={{ fontSize: '4rem', color: 'rgba(249,115,22,0.06)', lineHeight: 1 }}
+              >
+                02
+              </span>
+              <p className="font-mono uppercase mb-4" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#f97316' }}>
+                Monitor Orbital Decay
+              </p>
+              <div
+                className="rounded-lg mb-4"
+                style={{
+                  background: 'rgba(2,6,23,0.95)',
+                  border: '1px solid rgba(30,41,59,0.6)',
+                }}
+              >
+                <div className="flex justify-between items-center px-3 py-2" style={{ borderBottom: '1px solid rgba(30,41,59,0.4)' }}>
+                  <span className="font-mono" style={{ fontSize: '8px', color: '#334155' }}>APOGEE</span>
+                  <span className="font-mono font-bold" style={{ fontSize: '9px', color: '#f97316' }}>↓ 0.12 km/day</span>
                 </div>
+                <div className="flex justify-between items-center px-3 py-2">
+                  <span className="font-mono" style={{ fontSize: '8px', color: '#334155' }}>PERIGEE</span>
+                  <span className="font-mono font-bold" style={{ fontSize: '9px', color: '#f97316' }}>↓ 0.09 km/day</span>
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                Track apogee and perigee drift over TLE history. Visualize decay rate, eccentricity trend, and B* drag coefficient.
+              </p>
+            </div>
 
-                {/* Thin color accent line */}
-                <div
-                  className="w-6 h-0.5 mb-3 rounded-full"
-                  style={{ background: cap.live ? cap.color : '#1e3a5f' }}
-                />
+            {/* Arrow */}
+            <div className="hidden md:flex items-center justify-center text-xl" style={{ color: '#1e3a5f' }}>→</div>
 
-                <h3
-                  className="text-sm font-bold mb-2 uppercase tracking-wide"
-                  style={{ color: cap.live ? 'white' : '#334155' }}
-                >
-                  {cap.title}
-                </h3>
-                <p
-                  className="text-xs leading-relaxed"
-                  style={{ color: cap.live ? '#475569' : '#1e3a5f' }}
-                >
-                  {cap.body}
+            {/* Step 03 */}
+            <div
+              className="rounded-xl p-6 relative overflow-hidden"
+              style={{
+                background: 'rgba(2,6,23,0.8)',
+                border: '1px solid rgba(30,41,59,0.8)',
+              }}
+            >
+              <span
+                className="font-black italic absolute top-3 right-4 pointer-events-none select-none"
+                style={{ fontSize: '4rem', color: 'rgba(52,211,153,0.06)', lineHeight: 1 }}
+              >
+                03
+              </span>
+              <p className="font-mono uppercase mb-4" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#34d399' }}>
+                Plan and Execute
+              </p>
+              <div
+                className="rounded-lg p-3 mb-4 font-mono"
+                style={{
+                  background: 'rgba(2,6,23,0.95)',
+                  border: '1px solid rgba(30,41,59,0.6)',
+                }}
+              >
+                <p style={{ fontSize: '9px', color: '#34d399' }}>{'>'} REBOOST WINDOW FOUND · MAR 14</p>
+                <p style={{ fontSize: '9px', color: '#94a3b8' }}>{'>'} Δv: 24.2 m/s · Fuel: 1.8 kg</p>
+                <p style={{ fontSize: '9px', color: '#34d399' }}>
+                  {'>'} BURN SCHEDULED ✓<span className="terminal-cursor" style={{ background: '#34d399' }} />
                 </p>
               </div>
-            ))}
-          </div>
+              <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
+                Use the Reboost Planner to calculate the Hohmann transfer, scan for burn windows, and compute Tsiolkovsky fuel cost.
+              </p>
+            </div>
 
-          {/* Mission horizon note */}
-          <div
-            className="mt-8 rounded-xl px-6 py-4 flex items-center gap-4"
-            style={{
-              background: 'rgba(2,6,23,0.6)',
-              border: '1px dashed rgba(34,211,238,0.08)',
-            }}
-          >
-            <div className="w-1 h-8 rounded-full flex-shrink-0" style={{ background: 'rgba(34,211,238,0.15)' }} />
-            <p className="text-xs leading-relaxed" style={{ color: '#334155' }}>
-              <span style={{ color: '#475569' }}>The mission of OrbitIQ</span> is to extend satellite operational lifespan through precision orbital intelligence.
-              Decay prediction, reboost planning, and ΔV optimization are in active development —
-              built to give operators the tools to keep their satellites flying longer.
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          CAPABILITIES
+      ════════════════════════════════════════════════════════════════════ */}
+      <section
+        className="px-6 py-24"
+        style={{ borderTop: '1px solid rgba(30,41,59,0.5)' }}
+      >
+        <div className="max-w-7xl mx-auto">
+
+          <div className="mb-14">
+            <p className="text-[9px] tracking-[0.3em] uppercase mb-3" style={{ color: '#0891b2' }}>
+              Full Capability Stack
             </p>
+            <h2
+              className="font-black uppercase italic leading-none"
+              style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', color: 'white', letterSpacing: '-0.02em' }}
+            >
+              Everything operators need.
+            </h2>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+
+            {/* Left — live capability list */}
+            <div>
+              {/* Header */}
+              <div className="flex items-center gap-2 mb-6">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+                <span className="font-mono uppercase" style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#34d399' }}>
+                  Live · 6 Modules Active
+                </span>
+              </div>
+
+              {/* Capability rows */}
+              {capabilities.map((cap, i) => (
+                <div
+                  key={cap.title}
+                  className="flex items-center gap-4 py-4"
+                  style={{
+                    borderBottom: i < capabilities.length - 1 ? '1px solid rgba(30,41,59,0.5)' : 'none',
+                  }}
+                >
+                  {/* Accent bar */}
+                  <div
+                    className="w-0.5 self-stretch rounded-full flex-shrink-0"
+                    style={{ background: cap.color, minHeight: '36px' }}
+                  />
+                  {/* Content */}
+                  <div className="flex-1">
+                    <p className="text-sm font-bold uppercase tracking-wide text-white mb-0.5">{cap.title}</p>
+                    <p className="font-mono" style={{ fontSize: '9px', color: '#475569', letterSpacing: '0.05em' }}>{cap.spec}</p>
+                  </div>
+                  {/* Live badge */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: cap.color }} />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: cap.color }} />
+                    </span>
+                    <span className="font-mono" style={{ fontSize: '8px', letterSpacing: '0.2em', color: cap.color }}>LIVE</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Right — value proposition */}
+            <div
+              className="rounded-xl p-6"
+              style={{
+                background: 'rgba(2,6,23,0.6)',
+                border: '1px solid rgba(30,41,59,0.6)',
+              }}
+            >
+              <p className="font-mono uppercase mb-6" style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#0891b2' }}>
+                What You Get
+              </p>
+
+              {[
+                { color: '#34d399', text: 'Extend mission lifespan through precision altitude maintenance — every reboost adds months.' },
+                { color: '#f97316', text: 'Know your Δv budget before you burn. Tsiolkovsky-calculated fuel cost for every maneuver.' },
+                { color: '#22d3ee', text: 'Catch orbital decay early. 90-day altitude forecasts flag intervention windows before they become emergencies.' },
+                { color: '#818cf8', text: 'Simulate before you commit. Test burn parameters in the Sandbox, then execute with confidence.' },
+              ].map(({ color, text }, i) => (
+                <div key={i} className="flex items-start gap-3 mb-5 last:mb-0">
+                  <span className="font-mono font-bold flex-shrink-0 mt-0.5" style={{ fontSize: '12px', color }}>→</span>
+                  <p className="text-xs leading-relaxed" style={{ color: '#475569' }}>{text}</p>
+                </div>
+              ))}
+
+              {/* Stat strip */}
+              <div
+                className="grid grid-cols-3 gap-3 mt-6 pt-6"
+                style={{ borderTop: '1px solid rgba(30,41,59,0.5)' }}
+              >
+                {[
+                  { value: '6',       label: 'live modules',    color: '#22d3ee' },
+                  { value: '3s',      label: 'position update', color: '#34d399' },
+                  { value: '90 days', label: 'decay forecast',  color: '#f97316' },
+                ].map(({ value, label, color }) => (
+                  <div key={label} className="text-center">
+                    <p className="font-black italic" style={{ fontSize: '1.5rem', color, lineHeight: 1 }}>{value}</p>
+                    <p className="font-mono uppercase mt-1" style={{ fontSize: '8px', letterSpacing: '0.2em', color: '#334155' }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
         </div>
       </section>
 
@@ -506,12 +956,10 @@ const Landing = () => {
               className="font-black uppercase italic leading-none mb-6"
               style={{ fontSize: 'clamp(2rem, 4vw, 3.2rem)', color: 'white', letterSpacing: '-0.02em' }}
             >
-              Extend your mission.
+              Your first paying orbit starts here.
             </h2>
             <p className="text-sm leading-relaxed mb-6" style={{ color: '#64748b' }}>
-              We're onboarding a select group of satellite operators to shape the product roadmap.
-              If your team operates LEO, MEO, or GEO satellites and wants to reduce fuel burn
-              and maximize operational lifespan — we want to talk.
+              We're onboarding a select group of commercial satellite operators for early access. OrbitIQ is built for teams running 1–20 satellites that want to reduce unplanned fuel burns and maximize operational mission lifespan.
             </p>
             <p className="text-sm leading-relaxed mb-10" style={{ color: '#475569' }}>
               Every inquiry goes directly to the founding team. No automated replies.
@@ -550,7 +998,7 @@ const Landing = () => {
             </div>
           </div>
 
-          {/* Right — form */}
+          {/* Right — form (unchanged) */}
           <div
             className="rounded-2xl p-8"
             style={{
@@ -560,8 +1008,8 @@ const Landing = () => {
           >
             <div className="space-y-4">
               {[
-                { name: 'name',    placeholder: 'Your name',               type: 'text',  required: true },
-                { name: 'company', placeholder: 'Company / Organization',  type: 'text',  required: false },
+                { name: 'name',    placeholder: 'Your name',              type: 'text', required: true },
+                { name: 'company', placeholder: 'Company / Organization', type: 'text', required: false },
               ].map(({ name, placeholder, type, required }) => (
                 <input
                   key={name}
