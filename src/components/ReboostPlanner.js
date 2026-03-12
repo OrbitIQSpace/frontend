@@ -307,6 +307,9 @@ const ReboostPlanner = () => {
   const [targetAltKm, setTargetAltKm]     = useState('');
   const [targetAltError, setTargetAltError] = useState('');
 
+  // ── View mode ──────────────────────────────────────────────────────────────
+  const [viewMode, setViewMode]           = useState('3d');
+
   // ── Plan results ───────────────────────────────────────────────────────────
   const [planResult, setPlanResult]     = useState(null);
   const [isPlanning, setIsPlanning]     = useState(false);
@@ -654,6 +657,31 @@ const ReboostPlanner = () => {
     drawCurrentTrack();
   }, [drawCurrentTrack]);
 
+  const handleToggleView = useCallback(() => {
+    const viewer = viewerRef.current?.cesiumElement;
+    if (!viewer) return;
+    if (viewMode === '3d') {
+      viewer.scene.morphTo2D(1.0);
+      setViewMode('2d');
+    } else {
+      viewer.scene.morphTo3D(1.0);
+      setViewMode('3d');
+    }
+  }, [viewMode]);
+
+  const handleCenterView = useCallback(() => {
+    if (!currentPosition || !viewerRef.current?.cesiumElement) return;
+    viewerRef.current.cesiumElement.camera.flyTo({
+      destination: Cesium.Cartesian3.fromRadians(
+        currentPosition.lng,
+        currentPosition.lat,
+        currentPosition.height + 9000000
+      ),
+      orientation: { heading: Cesium.Math.toRadians(0), pitch: Cesium.Math.toRadians(-90), roll: 0.0 },
+      duration: 1.8,
+    });
+  }, [currentPosition]);
+
   // ── Derived values ─────────────────────────────────────────────────────────
   const altKm = currentPosition ? Math.round(currentPosition.height / 1000) : null;
 
@@ -846,6 +874,57 @@ const ReboostPlanner = () => {
           <span className="text-[8px] tracking-[0.2em] uppercase font-mono" style={{ color: '#1e3a5f' }}>UTC</span>
           <span className="text-xs font-bold font-mono" style={{ color: '#22d3ee' }}>{clockStr.replace(' UTC', '')}</span>
         </div>
+      </div>
+
+      {/* ── Viewer Nav ───────────────────────────────────────────────────── */}
+      <div
+        className="absolute z-30 flex items-center gap-1"
+        style={{
+          top: 52,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(2,6,15,0.85)',
+          border: '1px solid rgba(30,41,59,0.6)',
+          borderRadius: 8,
+          padding: '4px',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <Link
+          to={`/satellite/${noradId}`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ color: '#475569' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+        >
+          ← Overview
+        </Link>
+        <div style={{ width: 1, height: 14, background: 'rgba(30,41,59,0.8)' }} />
+        <Link
+          to={`/satellite/${noradId}/digital-twin`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ color: '#475569' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+        >
+          ⌖ Mission Control
+        </Link>
+        <Link
+          to={`/satellite/${noradId}/reboost`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono"
+          style={{ background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.35)', color: '#f97316' }}
+        >
+          ↑ Reboost Planner
+        </Link>
+        <Link
+          to={`/satellite/${noradId}/maneuver`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ color: '#475569' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+        >
+          ◎ Maneuver Sim
+        </Link>
       </div>
 
       {/* ── Left panel ─────────────────────────────────────────────────────── */}
@@ -1168,54 +1247,33 @@ const ReboostPlanner = () => {
       </div>
 
       {/* ── Bottom bar ─────────────────────────────────────────────────────── */}
-      <div className="absolute bottom-4 left-4 right-4 z-30 flex items-center justify-between">
-        <Link
-          to={`/satellite/${noradId}`}
-          className="group flex items-center gap-2 px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-colors"
-          style={{ background: 'rgba(2,6,23,0.88)', border: '1px solid rgba(30,41,59,0.6)', color: '#475569' }}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
+        <button
+          onClick={handleToggleView}
+          className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={viewMode === '2d' ? {
+            background: 'rgba(34,211,238,0.2)',
+            border: '1px solid rgba(34,211,238,0.5)',
+            color: '#22d3ee',
+          } : {
+            background: 'rgba(2,6,15,0.85)',
+            border: '1px solid rgba(30,41,59,0.6)',
+            color: '#475569',
+          }}
+          onMouseEnter={e => { if (viewMode === '3d') e.currentTarget.style.color = '#94a3b8'; }}
+          onMouseLeave={e => { if (viewMode === '3d') e.currentTarget.style.color = '#475569'; }}
+        >
+          {viewMode === '3d' ? '⊞ Ground Track' : '⊙ 3D Globe'}
+        </button>
+        <button
+          onClick={handleCenterView}
+          className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(30,41,59,0.6)', color: '#475569' }}
           onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
           onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
         >
-          <span className="group-hover:-translate-x-0.5 transition-transform inline-block">←</span>
-          Satellite Details
-        </Link>
-
-        <div className="flex items-center gap-2">
-          <Link
-            to={`/satellite/${noradId}/maneuver`}
-            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-colors"
-            style={{ background: 'rgba(2,6,23,0.88)', border: '1px solid rgba(30,41,59,0.6)', color: '#475569' }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
-          >
-            ◎ Maneuver Sandbox
-          </Link>
-          <Link
-            to={`/satellite/${noradId}/digital-twin`}
-            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-colors"
-            style={{ background: 'rgba(2,6,23,0.88)', border: '1px solid rgba(30,41,59,0.6)', color: '#475569' }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
-          >
-            ⌖ Mission Control
-          </Link>
-          <Link
-            to="/ground-stations"
-            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-colors"
-            style={{ background: 'rgba(2,6,23,0.88)', border: '1px solid rgba(30,41,59,0.6)', color: '#475569' }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
-          >
-            ⊞ Ground Stations
-          </Link>
-        </div>
-
-        <div className="px-3 py-2 rounded text-right" style={{
-          background: 'rgba(2,6,23,0.88)', border: '1px solid rgba(30,41,59,0.3)',
-        }}>
-          <div className="text-[8px] tracking-[0.2em] uppercase font-mono" style={{ color: '#1e3a5f' }}>Model</div>
-          <div className="text-[9px] font-mono tracking-widest" style={{ color: '#334155' }}>Hohmann · Vis-Viva</div>
-        </div>
+          ⊕ Center View
+        </button>
       </div>
     </div>
   );

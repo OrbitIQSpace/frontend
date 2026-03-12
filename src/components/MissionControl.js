@@ -1,4 +1,4 @@
-// src/components/DigitalTwin.js — Mission Control Viewer
+// src/components/MissionControl.js — Mission Control Viewer
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import axios from '../api';
@@ -118,7 +118,7 @@ const ScanLine = () => (
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-const DigitalTwin = () => {
+const MissionControl = () => {
   const { noradId } = useParams();
   const { getToken } = useAuth();
 
@@ -340,24 +340,6 @@ const DigitalTwin = () => {
     }).catch(err => console.warn('GeoJSON load failed:', err));
   }, [currentPosition]);
 
-  // ── Camera: track satellite ───────────────────────────────────────────────
-  const handleTrackSat = useCallback(() => {
-    if (!currentPosition || !viewerRef.current?.cesiumElement) return;
-    viewerRef.current.cesiumElement.camera.flyTo({
-      destination: Cesium.Cartesian3.fromRadians(
-        currentPosition.lng,
-        currentPosition.lat,
-        currentPosition.height + 1400000
-      ),
-      orientation: {
-        heading: Cesium.Math.toRadians(0),
-        pitch:   Cesium.Math.toRadians(-28),
-        roll:    0.0,
-      },
-      duration: 2.0,
-    });
-  }, [currentPosition]);
-
   // ── Camera: center on satellite from directly above ───────────────────────
   const handleCenterView = useCallback(() => {
     if (!currentPosition || !viewerRef.current?.cesiumElement) return;
@@ -566,6 +548,57 @@ const DigitalTwin = () => {
         </div>
       </div>
 
+      {/* ── Viewer Nav ───────────────────────────────────────────────────── */}
+      <div
+        className="absolute z-30 flex items-center gap-1"
+        style={{
+          top: 52,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(2,6,15,0.85)',
+          border: '1px solid rgba(30,41,59,0.6)',
+          borderRadius: 8,
+          padding: '4px',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <Link
+          to={`/satellite/${noradId}`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ color: '#475569' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+        >
+          ← Overview
+        </Link>
+        <div style={{ width: 1, height: 14, background: 'rgba(30,41,59,0.8)' }} />
+        <Link
+          to={`/satellite/${noradId}/digital-twin`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono"
+          style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.35)', color: '#34d399' }}
+        >
+          ⌖ Mission Control
+        </Link>
+        <Link
+          to={`/satellite/${noradId}/reboost`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ color: '#475569' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+        >
+          ↑ Reboost Planner
+        </Link>
+        <Link
+          to={`/satellite/${noradId}/maneuver`}
+          className="px-3 py-1.5 rounded text-[9px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ color: '#475569' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
+        >
+          ◎ Maneuver Sim
+        </Link>
+      </div>
+
       {/* ── Left panel: State Vector ─────────────────────────────────────── */}
       <div className="absolute left-4 top-1/2 -translate-y-1/2 z-30" style={{ width: 176 }}>
         <Panel>
@@ -623,23 +656,6 @@ const DigitalTwin = () => {
           </Panel>
         )}
 
-        <Panel dashed>
-          <PanelTitle>Upcoming Modules</PanelTitle>
-          <div className="flex flex-col divide-y divide-slate-800/60">
-            {['Orbit Simulation', 'Decay Prediction', 'Fuel Optimizer', 'Reboost Planner'].map((mod) => (
-              <div key={mod} className="flex items-center justify-between py-2">
-                <span className="text-[9px] text-slate-600 font-mono">{mod}</span>
-                <span
-                  className="text-[7px] tracking-widest px-1.5 py-0.5 rounded font-mono"
-                  style={{ background: 'rgba(34,211,238,0.05)', color: 'rgba(34,211,238,0.3)', border: '1px solid rgba(34,211,238,0.08)' }}
-                >
-                  SOON
-                </span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
         {/* Ground stations indicator */}
         <div
           className="rounded px-3 py-2.5"
@@ -667,87 +683,36 @@ const DigitalTwin = () => {
       </div>
 
       {/* ── Bottom bar ───────────────────────────────────────────────────── */}
-      <div className="absolute bottom-4 left-4 right-4 z-30 flex items-center justify-between">
-
-        {/* Back */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
         <button
-          onClick={() => window.history.back()}
-          className="group flex items-center gap-2 px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono text-slate-500 hover:text-cyan-400 transition-colors"
-          style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(148,163,184,0.1)' }}
+          onClick={handleToggleView}
+          className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={viewMode === '2d' ? {
+            background: 'rgba(34,211,238,0.2)',
+            border: '1px solid rgba(34,211,238,0.5)',
+            color: '#22d3ee',
+          } : {
+            background: 'rgba(2,6,15,0.85)',
+            border: '1px solid rgba(30,41,59,0.6)',
+            color: '#475569',
+          }}
+          onMouseEnter={e => { if (viewMode === '3d') e.currentTarget.style.color = '#94a3b8'; }}
+          onMouseLeave={e => { if (viewMode === '3d') e.currentTarget.style.color = '#475569'; }}
         >
-          <span className="group-hover:-translate-x-0.5 transition-transform inline-block">←</span>
-          Back
+          {viewMode === '3d' ? '⊞ Ground Track' : '⊙ 3D Globe'}
         </button>
-
-        {/* Centre controls */}
-        <div className="flex items-center gap-2">
-
-          {/* Maneuver Sandbox */}
-          <Link
-            to={`/satellite/${noradId}/maneuver`}
-            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
-            style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.28)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)')}
-          >
-            ◎ Maneuver Sandbox
-          </Link>
-
-          {/* 3D / 2D toggle */}
-          <button
-            onClick={handleToggleView}
-            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
-            style={viewMode === '2d' ? {
-              background: 'rgba(8,145,178,0.35)',
-              border: '1px solid rgba(34,211,238,0.5)',
-              color: '#22d3ee',
-            } : {
-              background: 'rgba(2,6,15,0.85)',
-              border: '1px solid rgba(148,163,184,0.15)',
-              color: '#64748b',
-            }}
-            onMouseEnter={e => { if (viewMode === '3d') e.currentTarget.style.color = '#94a3b8'; }}
-            onMouseLeave={e => { if (viewMode === '3d') e.currentTarget.style.color = '#64748b'; }}
-          >
-            {viewMode === '3d' ? '⊞ Ground Track View' : '⊙ 3D Globe View'}
-          </button>
-
-          {/* Track satellite */}
-          <button
-            onClick={handleTrackSat}
-            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
-            style={{ background: 'rgba(6,78,59,0.55)', border: '1px solid rgba(52,211,153,0.28)', color: '#34d399' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(6,78,59,0.85)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(6,78,59,0.55)')}
-          >
-            ⌖ Track Satellite
-          </button>
-
-          {/* Center view */}
-          <button
-            onClick={handleCenterView}
-            className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
-            style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(148,163,184,0.1)', color: '#64748b' }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#64748b')}
-          >
-            ⊕ Center View
-          </button>
-        </div>
-
-        {/* Propagation badge */}
-        <div
-          className="px-3 py-2 rounded text-right"
-          style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(148,163,184,0.07)' }}
+        <button
+          onClick={handleCenterView}
+          className="px-4 py-2 rounded text-[10px] tracking-[0.18em] uppercase font-mono transition-all"
+          style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(30,41,59,0.6)', color: '#475569' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#94a3b8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#475569')}
         >
-          <div className="text-[8px] tracking-[0.2em] text-slate-700 uppercase font-mono">Model · View</div>
-          <div className="text-[9px] text-slate-500 tracking-widest font-mono">
-            SGP4 · {viewMode === '3d' ? '3D Globe' : '2D Flat'}
-          </div>
-        </div>
+          ⊕ Center View
+        </button>
       </div>
     </div>
   );
 };
 
-export default DigitalTwin;
+export default MissionControl;

@@ -4,7 +4,7 @@ import { SignedIn, SignedOut, UserButton, SignInButton } from '@clerk/clerk-reac
 import AddSatellite from './components/AddSatellite';
 import Satellites from './components/Satellites';
 import SatelliteDetails from './components/SatelliteDetails';
-import DigitalTwin from './components/DigitalTwin';
+import MissionControl from './components/MissionControl';
 import ManeuverSandbox from './components/ManeuverSandbox';
 import ReboostPlanner from './components/ReboostPlanner';
 import GroundStations from './pages/GroundStations';
@@ -270,7 +270,7 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
           {/* MISSION CONTROL (Digital Twin) */}
           <Route path="/satellite/:noradId/digital-twin" element={
             <SignedIn>
-              <DigitalTwin />
+              <MissionControl />
             </SignedIn>
           } />
 

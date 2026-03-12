@@ -1,6 +1,6 @@
 // src/hooks/useGroundStations.js
 // Fetches account-wide ground stations and renders them on a Cesium globe.
-// Used by both DigitalTwin and ManeuverSandbox.
+// Used by MissionControl, ManeuverSandbox, and ReboostPlanner.
 //
 // Returns:
 //   stations          — raw station array from the API
