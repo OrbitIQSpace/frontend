@@ -57,27 +57,56 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
         <div className="max-w-7xl mx-auto px-6 py-2 flex justify-between items-center">
 
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-5 group select-none">
-            <div className="relative">
-              <svg width="160" height="50" viewBox="0 0 220 70" className="drop-shadow-xl group-hover:drop-shadow-cyan-400/80 transition">
-                <path d="M 28 38 Q 50 -4 92 20" fill="none" stroke="#06b6d4" strokeWidth="3" opacity="0.7"/>
-                <defs>
-                  <linearGradient id="trail" x1="0%" y1="100%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#06b6d4" stopOpacity="0" />
-                    <stop offset="30%" stopColor="#06b6d4" stopOpacity="0.9" />
-                    <stop offset="70%" stopColor="#06b6d4" stopOpacity="0.9" />
-                    <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d="M 28 38 Q 50 -4 92 20" fill="none" stroke="url(#trail)" strokeWidth="7" opacity="0.6"/>
-                <circle cx="92" cy="20" r="8" fill="#06b6d4">
-                  <animate attributeName="opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite" />
-                </circle>
-                <circle cx="92" cy="20" r="12" fill="#06b6d4" opacity="0.3" />
-                <text x="130" y="55" fontFamily="system-ui, sans-serif" fontWeight="900" fontSize="48" fill="#06b6d4" textAnchor="middle" className="tracking-tight">
-                  OrbitIQ
-                </text>
-              </svg>
+          <Link to="/" className="flex items-center gap-3 group select-none" style={{ transition: 'opacity 0.2s' }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+          >
+            {/* Logomark — planet + orbit + satellite */}
+            <svg viewBox="0 0 52 52" width="36" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <clipPath id="hdr-planet-clip">
+                  <circle cx="26" cy="26" r="13" />
+                </clipPath>
+              </defs>
+              {/* Orbital ellipse — behind planet */}
+              <ellipse cx="26" cy="26" rx="24" ry="8.5"
+                stroke="white" strokeWidth="1.4" opacity="0.9"
+                transform="rotate(-18 26 26)"
+              />
+              {/* Planet body */}
+              <circle cx="26" cy="26" r="13" stroke="white" strokeWidth="1.8" />
+              {/* Equatorial bands — clipped inside planet */}
+              <g clipPath="url(#hdr-planet-clip)" opacity="0.45">
+                <line x1="0" y1="22" x2="52" y2="22" stroke="white" strokeWidth="1.8" />
+                <line x1="0" y1="30" x2="52" y2="30" stroke="white" strokeWidth="1.8" />
+              </g>
+              {/* Satellite dot */}
+              <circle cx="47" cy="17" r="3" fill="#22d3ee" />
+            </svg>
+
+            {/* Wordmark + tagline */}
+            <div>
+              <p style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontWeight: 900,
+                fontSize: '15px',
+                letterSpacing: '-0.02em',
+                color: 'white',
+                lineHeight: 1,
+                marginBottom: 3,
+              }}>
+                OrbitIQ
+              </p>
+              <p style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontSize: '7px',
+                letterSpacing: '0.28em',
+                color: '#0891b2',
+                textTransform: 'uppercase',
+                lineHeight: 1,
+              }}>
+                Advancing Capabilities In Space
+              </p>
             </div>
           </Link>
 
