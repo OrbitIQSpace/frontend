@@ -1,10 +1,12 @@
 // src/pages/GroundStations.js
 // Account-wide ground station management — /ground-stations
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import axios from '../api';
 import { useAuth } from '@clerk/clerk-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -120,6 +122,13 @@ const GroundStations = () => {
   const [editingId, setEditingId]     = useState(null);
   const [expandedId, setExpandedId]   = useState(null);
 
+  // ── Map refs ─────────────────────────────────────────────────────────────
+  const mapContainerRef = useRef(null);  // DOM div for Leaflet
+  const leafletMapRef   = useRef(null);  // Leaflet Map instance
+  const pinMarkerRef    = useRef(null);  // Draggable "new station" pin
+  const stationLayerRef = useRef(null);  // LayerGroup for existing markers
+  const isDraggingRef   = useRef(false); // True while pin is being dragged
+
   // ── Fetch ───────────────────────────────────────────────────────────────
   const fetchStations = useCallback(async () => {
     setLoading(true);
@@ -138,6 +147,130 @@ const GroundStations = () => {
   }, [getToken]);
 
   useEffect(() => { fetchStations(); }, [fetchStations]);
+
+  // ── Map: initialize Leaflet once on mount ────────────────────────────────
+  useEffect(() => {
+    if (!mapContainerRef.current || leafletMapRef.current) return;
+    const map = L.map(mapContainerRef.current, { preferCanvas: true, zoomControl: true })
+      .setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/">CARTO</a>',
+      maxZoom: 18,
+    }).addTo(map);
+    stationLayerRef.current = L.layerGroup().addTo(map);
+    leafletMapRef.current = map;
+    return () => { map.remove(); leafletMapRef.current = null; };
+  }, []);
+
+  // ── Map: redraw existing station markers when stations list changes ───────
+  useEffect(() => {
+    if (!stationLayerRef.current) return;
+    stationLayerRef.current.clearLayers();
+    stations.forEach(st => {
+      const icon = L.divIcon({
+        className: '',
+        html: '<div style="width:10px;height:10px;background:#34d399;border:2px solid #fff;border-radius:50%;box-shadow:0 0 6px #34d399;"></div>',
+        iconAnchor: [5, 5],
+      });
+      L.marker([st.latitude, st.longitude], { icon })
+        .bindTooltip(st.name, { direction: 'top', offset: [0, -8] })
+        .addTo(stationLayerRef.current);
+    });
+  }, [stations]);
+
+  // ── Map: click handler — place/move pin when form open, open form when not
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    const pinIcon = L.divIcon({
+      className: '',
+      html: '<div style="width:14px;height:14px;background:#22d3ee;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px #22d3ee;cursor:grab;"></div>',
+      iconAnchor: [7, 7],
+    });
+
+    const placePin = (latlng) => {
+      const lat = parseFloat(latlng.lat.toFixed(4));
+      const lng = parseFloat(latlng.lng.toFixed(4));
+      setForm(f => ({ ...f, latitude: String(lat), longitude: String(lng) }));
+      if (pinMarkerRef.current) {
+        pinMarkerRef.current.setLatLng(latlng);
+      } else {
+        const pin = L.marker(latlng, { icon: pinIcon, draggable: true }).addTo(map);
+        pin.on('dragstart', () => { isDraggingRef.current = true; });
+        pin.on('drag', e => {
+          const p = e.latlng;
+          setForm(f => ({ ...f,
+            latitude:  String(parseFloat(p.lat.toFixed(4))),
+            longitude: String(parseFloat(p.lng.toFixed(4))),
+          }));
+        });
+        pin.on('dragend', () => { isDraggingRef.current = false; });
+        pinMarkerRef.current = pin;
+      }
+    };
+
+    const onClick = (e) => {
+      if (!showForm) {
+        setForm({ ...BLANK_FORM,
+          latitude:  String(parseFloat(e.latlng.lat.toFixed(4))),
+          longitude: String(parseFloat(e.latlng.lng.toFixed(4))),
+        });
+        setEditingId(null);
+        setFormError('');
+        setShowForm(true);
+      }
+      placePin(e.latlng);
+    };
+
+    map.on('click', onClick);
+    return () => {
+      map.off('click', onClick);
+    };
+  }, [showForm]);
+
+  // ── Map: sync pin position when lat/lon typed manually in form ───────────
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map || !showForm || isDraggingRef.current) return;
+
+    const lat = parseFloat(form.latitude);
+    const lng = parseFloat(form.longitude);
+
+    // Remove pin if values are cleared or out of range
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      if (pinMarkerRef.current) { pinMarkerRef.current.remove(); pinMarkerRef.current = null; }
+      return;
+    }
+
+    if (pinMarkerRef.current) {
+      // Move existing pin only if position actually changed (avoids feedback loop)
+      const cur = pinMarkerRef.current.getLatLng();
+      if (Math.abs(cur.lat - lat) > 0.00005 || Math.abs(cur.lng - lng) > 0.00005) {
+        pinMarkerRef.current.setLatLng([lat, lng]);
+        map.panTo([lat, lng]);
+      }
+    } else {
+      // Create pin when operator types valid coords with no existing pin
+      const pinIcon = L.divIcon({
+        className: '',
+        html: '<div style="width:14px;height:14px;background:#22d3ee;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px #22d3ee;cursor:grab;"></div>',
+        iconAnchor: [7, 7],
+      });
+      const pin = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
+      pin.on('dragstart', () => { isDraggingRef.current = true; });
+      pin.on('drag', e => {
+        const p = e.latlng;
+        setForm(f => ({ ...f,
+          latitude:  String(parseFloat(p.lat.toFixed(4))),
+          longitude: String(parseFloat(p.lng.toFixed(4))),
+        }));
+      });
+      pin.on('dragend', () => { isDraggingRef.current = false; });
+      pinMarkerRef.current = pin;
+      map.panTo([lat, lng]);
+    }
+  }, [form.latitude, form.longitude, showForm]);
 
   // ── Save (create or update) ─────────────────────────────────────────────
   const handleSave = async () => {
@@ -167,6 +300,7 @@ const GroundStations = () => {
         });
         setStations(prev => [...prev, res.data]);
       }
+      if (pinMarkerRef.current) { pinMarkerRef.current.remove(); pinMarkerRef.current = null; }
       setShowForm(false);
       setEditingId(null);
       setForm(BLANK_FORM);
@@ -208,6 +342,7 @@ const GroundStations = () => {
   };
 
   const handleCancelForm = () => {
+    if (pinMarkerRef.current) { pinMarkerRef.current.remove(); pinMarkerRef.current = null; }
     setShowForm(false);
     setEditingId(null);
     setForm(BLANK_FORM);
@@ -263,6 +398,31 @@ const GroundStations = () => {
             >
               + Add Station
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Interactive map ───────────────────────────────────────────────── */}
+      <div
+        className="relative rounded-xl overflow-hidden mb-6"
+        style={{ border: '1px solid rgba(30,41,59,0.8)' }}
+      >
+        <div ref={mapContainerRef} style={{ height: 288 }} />
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
+          {showForm ? (
+            <span
+              className="px-3 py-1 rounded-full text-[10px] font-mono tracking-widest uppercase"
+              style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(34,211,238,0.3)', color: '#22d3ee' }}
+            >
+              Click map to place station
+            </span>
+          ) : (
+            <span
+              className="px-3 py-1 rounded-full text-[10px] font-mono tracking-widest uppercase"
+              style={{ background: 'rgba(2,6,15,0.85)', border: '1px solid rgba(30,41,59,0.6)', color: '#475569' }}
+            >
+              Click map to add a station
+            </span>
           )}
         </div>
       </div>

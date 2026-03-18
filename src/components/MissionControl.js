@@ -361,16 +361,26 @@ const MissionControl = () => {
   // ── Trigger initial draw + 60 s redraw — after handleCenterView ──────────
   useEffect(() => {
     if (!tle || !currentPosition) return;
-    const initialTimer = setTimeout(() => {
+
+    let attempts = 0;
+    let retryTimer = null;
+    const tryDraw = () => {
+      attempts++;
+      if (!viewerRef.current?.cesiumElement) {
+        if (attempts < 10) retryTimer = setTimeout(tryDraw, 400);
+        return;
+      }
       drawGroundTrack();
       if (!hasAutoCenteredRef.current) {
         hasAutoCenteredRef.current = true;
         handleCenterView();
       }
-    }, 800);
+    };
+
+    retryTimer = setTimeout(tryDraw, 800);
     trackRedrawTimer.current = setInterval(() => drawGroundTrack(), 60 * 1000);
     return () => {
-      clearTimeout(initialTimer);
+      clearTimeout(retryTimer);
       clearInterval(trackRedrawTimer.current);
     };
   }, [tle, currentPosition, drawGroundTrack, handleCenterView]);

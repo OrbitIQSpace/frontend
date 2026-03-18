@@ -202,10 +202,21 @@ const useGroundStations = (viewerRef, currentSatPosition) => {
     stationEntitiesRef.current = added;
   }, [stations, currentSatPosition, viewerRef]);
 
-  // Redraw when stations or satellite position changes
+  // Redraw when stations or satellite position changes — retry until viewer ready
   useEffect(() => {
-    if (!stations.length || !viewerRef.current?.cesiumElement) return;
-    drawStations();
+    if (!stations.length) return;
+    let attempts = 0;
+    let retryTimer = null;
+    const tryDraw = () => {
+      attempts++;
+      if (!viewerRef.current?.cesiumElement) {
+        if (attempts < 10) retryTimer = setTimeout(tryDraw, 400);
+        return;
+      }
+      drawStations();
+    };
+    retryTimer = setTimeout(tryDraw, 400);
+    return () => clearTimeout(retryTimer);
   }, [stations, currentSatPosition, drawStations, viewerRef]);
 
   // ── Visibility helper for external use ───────────────────────────────
