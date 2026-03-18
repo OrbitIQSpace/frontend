@@ -326,8 +326,8 @@ const ReboostPlanner = () => {
   const viewerRef          = useRef(null);
   const imageryLoadedRef   = useRef(false);
   const bordersLoadedRef   = useRef(false);
-  const currentTrackRef    = useRef([]);
-  const reboostTrackRef    = useRef([]);
+  const currentTrackRef    = useRef(null); // PolylineCollection primitive
+  const reboostTrackRef    = useRef(null); // PolylineCollection primitive
   const burnMarkerRef      = useRef(null);
   const hasAutoCenteredRef = useRef(false);
 
@@ -340,27 +340,33 @@ const ReboostPlanner = () => {
     return () => clearInterval(t);
   }, []);
 
-  // ── Imagery — imperative load (must run every render until loaded) ─────────
+  // ── Imagery — imperative load, run once on mount ──────────────────────────
   useEffect(() => {
-    if (imageryLoadedRef.current || !viewerRef.current?.cesiumElement) return;
-    imageryLoadedRef.current = true;
-    const viewer = viewerRef.current.cesiumElement;
-    viewer.imageryLayers.removeAll();
-    viewer.imageryLayers.addImageryProvider(
-      new Cesium.UrlTemplateImageryProvider({
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        credit: 'Tiles © Esri',
-        maximumLevel: 19,
-      })
-    );
-    const layer = viewer.imageryLayers.get(0);
-    if (layer) {
-      layer.brightness = 0.45;
-      layer.contrast   = 1.2;
-      layer.saturation = 0.4;
-      layer.gamma      = 1.1;
-    }
-  });
+    let cancelled = false;
+    const tryLoad = () => {
+      if (cancelled || imageryLoadedRef.current) return;
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer) { setTimeout(tryLoad, 100); return; }
+      imageryLoadedRef.current = true;
+      viewer.imageryLayers.removeAll();
+      viewer.imageryLayers.addImageryProvider(
+        new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          credit: 'Tiles © Esri',
+          maximumLevel: 19,
+        })
+      );
+      const layer = viewer.imageryLayers.get(0);
+      if (layer) {
+        layer.brightness = 0.45;
+        layer.contrast   = 1.2;
+        layer.saturation = 0.4;
+        layer.gamma      = 1.1;
+      }
+    };
+    tryLoad();
+    return () => { cancelled = true; };
+  }, []); // run once on mount only
 
   // ── Fetch satellite + TLE + tle_derived ────────────────────────────────────
   useEffect(() => {
@@ -447,53 +453,42 @@ const ReboostPlanner = () => {
     const positions = computeGroundTrack(tle, Date.now(), periodMin, 30);
     const segments  = splitAtAntimeridian(positions);
 
-    currentTrackRef.current.forEach(e => { try { viewer.entities.remove(e); } catch {} });
-    currentTrackRef.current = [];
+    // Remove old primitive collection
+    if (currentTrackRef.current) {
+      try { viewer.scene.primitives.remove(currentTrackRef.current); } catch {}
+      currentTrackRef.current = null;
+    }
+
+    // PolylineCollection: direct GPU submit, no async geometry worker
+    const col = new Cesium.PolylineCollection();
+    viewer.scene.primitives.add(col);
+    currentTrackRef.current = col;
 
     segments.forEach(seg => {
       if (seg.length < 2) return;
-      currentTrackRef.current.push(viewer.entities.add({
-        polyline: {
-          positions: seg,
-          width:     2.5,
-          material:  new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.2,
-            color:     Cesium.Color.fromCssColorString('#22d3ee').withAlpha(0.6),
-          }),
-          arcType:       Cesium.ArcType.NONE,
-          clampToGround: false,
-        },
-      }));
+      col.add({
+        positions: seg,
+        width:     2.5,
+        material:  Cesium.Material.fromType('PolylineGlow', {
+          glowPower: 0.2,
+          color:     Cesium.Color.fromCssColorString('#22d3ee').withAlpha(0.6),
+        }),
+      });
     });
   }, [tle]);
 
-  // ── Initial draw: wait for scene.postRender (true readiness signal) then draw
+  // ── Initial draw: poll until viewer + scene are ready, then draw ─────────
   useEffect(() => {
     if (!tle) return;
-
-    let drawn = false;
-    let pollTimer = null;
-    let removeListener = null;
-
-    const doInitialDraw = () => {
-      if (drawn) return;
-      drawn = true;
-      if (removeListener) { removeListener(); removeListener = null; }
+    let cancelled = false;
+    const tryDraw = () => {
+      if (cancelled) return;
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer || !viewer.scene) { setTimeout(tryDraw, 200); return; }
       drawCurrentTrack();
     };
-
-    const waitForScene = () => {
-      const viewer = viewerRef.current?.cesiumElement;
-      if (!viewer) { pollTimer = setTimeout(waitForScene, 200); return; }
-      const listener = viewer.scene.postRender.addEventListener(() => {
-        viewer.scene.postRender.removeEventListener(listener);
-        doInitialDraw();
-      });
-      removeListener = () => viewer.scene.postRender.removeEventListener(listener);
-    };
-
-    pollTimer = setTimeout(waitForScene, 200);
-    return () => { clearTimeout(pollTimer); if (removeListener) removeListener(); };
+    const t = setTimeout(tryDraw, 400);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [tle, drawCurrentTrack]);
 
   // ── Auto-center once when position first becomes available ─────────────────
@@ -574,8 +569,10 @@ const ReboostPlanner = () => {
       const burnDuration = (fuelResult && thr && isp) ? computeBurnDuration(fuelResult.deltaMass_kg, thr, isp) : null;
 
       // 3. Draw post-reboost orbit on globe (amber at target altitude)
-      reboostTrackRef.current.forEach(e => { try { viewer.entities.remove(e); } catch {} });
-      reboostTrackRef.current = [];
+      if (reboostTrackRef.current) {
+        try { viewer.scene.primitives.remove(reboostTrackRef.current); } catch {}
+        reboostTrackRef.current = null;
+      }
       if (burnMarkerRef.current) {
         try { viewer.entities.remove(burnMarkerRef.current); } catch {}
         burnMarkerRef.current = null;
@@ -592,20 +589,20 @@ const ReboostPlanner = () => {
         return Cesium.Cartesian3.fromRadians(cart.longitude, cart.latitude, targetAlt * 1000 + 10000);
       });
 
+      // PolylineCollection: direct GPU submit, no async geometry worker
+      const reboostCol = new Cesium.PolylineCollection();
+      viewer.scene.primitives.add(reboostCol);
+      reboostTrackRef.current = reboostCol;
       splitAtAntimeridian(reboostPositions).forEach(seg => {
         if (seg.length < 2) return;
-        reboostTrackRef.current.push(viewer.entities.add({
-          polyline: {
-            positions: seg,
-            width:     2.5,
-            material:  new Cesium.PolylineGlowMaterialProperty({
-              glowPower: 0.3,
-              color:     Cesium.Color.fromCssColorString('#f97316').withAlpha(0.75),
-            }),
-            arcType:       Cesium.ArcType.NONE,
-            clampToGround: false,
-          },
-        }));
+        reboostCol.add({
+          positions: seg,
+          width:     2.5,
+          material:  Cesium.Material.fromType('PolylineGlow', {
+            glowPower: 0.3,
+            color:     Cesium.Color.fromCssColorString('#f97316').withAlpha(0.75),
+          }),
+        });
       });
 
       // Burn point marker at current position
@@ -660,8 +657,10 @@ const ReboostPlanner = () => {
   const handleClear = useCallback(() => {
     const viewer = viewerRef.current?.cesiumElement;
     if (viewer) {
-      reboostTrackRef.current.forEach(e => { try { viewer.entities.remove(e); } catch {} });
-      reboostTrackRef.current = [];
+      if (reboostTrackRef.current) {
+        try { viewer.scene.primitives.remove(reboostTrackRef.current); } catch {}
+        reboostTrackRef.current = null;
+      }
       if (burnMarkerRef.current) {
         try { viewer.entities.remove(burnMarkerRef.current); } catch {}
         burnMarkerRef.current = null;

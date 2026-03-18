@@ -73,6 +73,13 @@ const useGroundStations = (viewerRef, currentSatPosition) => {
   const [loading, setLoading]   = useState(true);
   const stationEntitiesRef      = useRef([]);
 
+  // Keep a ref to currentSatPosition so drawStations can read the latest value
+  // without being recreated on every position tick.
+  const currentSatPositionRef = useRef(currentSatPosition);
+  useEffect(() => {
+    currentSatPositionRef.current = currentSatPosition;
+  }, [currentSatPosition]);
+
   // ── Fetch stations ────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -101,11 +108,12 @@ const useGroundStations = (viewerRef, currentSatPosition) => {
     if (!viewerRef.current?.cesiumElement || !stations.length) return;
     const viewer = viewerRef.current.cesiumElement;
 
-    // Determine current satellite altitude for footprint radius calculation
-    const satHeightM  = currentSatPosition?.height ?? 420000;
+    // Read satellite position from ref — avoids recreating this callback every tick
+    const satPos = currentSatPositionRef.current;
+    const satHeightM  = satPos?.height ?? 420000;
     const satAltKm    = satHeightM / 1000;
-    const satLat      = currentSatPosition ? currentSatPosition.lat * 180 / Math.PI : null;
-    const satLng      = currentSatPosition ? currentSatPosition.lng * 180 / Math.PI : null;
+    const satLat      = satPos ? satPos.lat * 180 / Math.PI : null;
+    const satLng      = satPos ? satPos.lng * 180 / Math.PI : null;
 
     // Remove old station entities
     stationEntitiesRef.current.forEach(e => { try { viewer.entities.remove(e); } catch {} });
@@ -200,44 +208,33 @@ const useGroundStations = (viewerRef, currentSatPosition) => {
     });
 
     stationEntitiesRef.current = added;
-  }, [stations, currentSatPosition, viewerRef]);
+  }, [stations, viewerRef]);
 
-  // Redraw when stations or satellite position changes
-  // If viewer is already running (normal case), draw immediately.
-  // On first mount when viewer isn't ready yet, wait for scene.postRender.
+  // Initial draw: poll until viewer is ready, then draw once when stations load.
+  // drawStations is stable (doesn't depend on currentSatPosition), so this
+  // effect only re-runs when the stations list itself changes.
   useEffect(() => {
     if (!stations.length) return;
-
-    const viewer = viewerRef.current?.cesiumElement;
-    if (viewer) {
-      drawStations();
-      return;
-    }
-
-    let drawn = false;
-    let pollTimer = null;
-    let removeListener = null;
-
-    const doFirstDraw = () => {
-      if (drawn) return;
-      drawn = true;
-      if (removeListener) { removeListener(); removeListener = null; }
+    let cancelled = false;
+    const tryDraw = () => {
+      if (cancelled) return;
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer || !viewer.scene) { setTimeout(tryDraw, 200); return; }
       drawStations();
     };
+    const t = setTimeout(tryDraw, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [stations, drawStations, viewerRef]);
 
-    const waitForScene = () => {
-      const v = viewerRef.current?.cesiumElement;
-      if (!v) { pollTimer = setTimeout(waitForScene, 200); return; }
-      const listener = v.scene.postRender.addEventListener(() => {
-        v.scene.postRender.removeEventListener(listener);
-        doFirstDraw();
-      });
-      removeListener = () => v.scene.postRender.removeEventListener(listener);
-    };
-
-    pollTimer = setTimeout(waitForScene, 200);
-    return () => { clearTimeout(pollTimer); if (removeListener) removeListener(); };
-  }, [stations, currentSatPosition, drawStations, viewerRef]);
+  // Visibility refresh: redraw every 5 s so IN RANGE / OUT OF RANGE labels
+  // stay current as the satellite moves — without recreating entities every tick.
+  useEffect(() => {
+    if (!stations.length) return;
+    const id = setInterval(() => {
+      if (viewerRef.current?.cesiumElement) drawStations();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [stations, drawStations, viewerRef]);
 
   // ── Visibility helper for external use ───────────────────────────────
   const checkVisibility = useCallback((stationId, satInfo) => {

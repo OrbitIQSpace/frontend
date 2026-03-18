@@ -142,30 +142,32 @@ const MissionControl = () => {
   const { stations } = useGroundStations(viewerRef, currentPosition);
 
   // ── Imagery: imperative load after viewer mounts ──────────────────────────
-  // Loading via useRef prop silently fails on some Resium versions;
-  // replacing the base layer directly on cesiumElement is reliable.
   useEffect(() => {
-    if (imageryLoadedRef.current) return;
-    if (!viewerRef.current?.cesiumElement) return;
-    imageryLoadedRef.current = true;
-
-    const viewer = viewerRef.current.cesiumElement;
-    viewer.imageryLayers.removeAll();
-    viewer.imageryLayers.addImageryProvider(
-      new Cesium.UrlTemplateImageryProvider({
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        credit: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
-        maximumLevel: 19,
-      })
-    );
-    const layer = viewer.imageryLayers.get(0);
-    if (layer) {
-      layer.brightness = 0.45;
-      layer.contrast   = 1.2;
-      layer.saturation = 0.4;
-      layer.gamma      = 1.1;
-    }
-  }); // runs every render until ref is set — ref guards re-entry
+    let cancelled = false;
+    const tryLoad = () => {
+      if (cancelled || imageryLoadedRef.current) return;
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer) { setTimeout(tryLoad, 100); return; }
+      imageryLoadedRef.current = true;
+      viewer.imageryLayers.removeAll();
+      viewer.imageryLayers.addImageryProvider(
+        new Cesium.UrlTemplateImageryProvider({
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          credit: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
+          maximumLevel: 19,
+        })
+      );
+      const layer = viewer.imageryLayers.get(0);
+      if (layer) {
+        layer.brightness = 0.45;
+        layer.contrast   = 1.2;
+        layer.saturation = 0.4;
+        layer.gamma      = 1.1;
+      }
+    };
+    tryLoad();
+    return () => { cancelled = true; };
+  }, []); // run once on mount only
 
   // ── UTC clock + session timer ─────────────────────────────────────────────
   useEffect(() => {
@@ -242,47 +244,41 @@ const MissionControl = () => {
     const pastSegments   = splitAtAntimeridian(pastPositions);
     const futureSegments = splitAtAntimeridian(futurePositions);
 
-    trackEntitiesRef.current.forEach(e => { try { viewer.entities.remove(e); } catch {} });
+    // Remove old primitive collections — bypasses geometry worker entirely
+    trackEntitiesRef.current.forEach(col => { try { viewer.scene.primitives.remove(col); } catch {} });
     trackEntitiesRef.current = [];
 
-    const added = [];
-
-    // Past track — yellow, same thickness
+    // Past track — yellow (PolylineCollection: direct GPU, no async worker)
+    const pastCol = new Cesium.PolylineCollection();
+    viewer.scene.primitives.add(pastCol);
     pastSegments.forEach(seg => {
       if (seg.length < 2) return;
-      added.push(viewer.entities.add({
-        polyline: {
-          positions:     seg,
-          width:         3.5,
-          material:      new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.3,
-            color:     Cesium.Color.fromCssColorString('#fbbf24').withAlpha(0.75),
-          }),
-          arcType:       Cesium.ArcType.NONE,
-          clampToGround: false,
-        },
-      }));
+      pastCol.add({
+        positions: seg,
+        width:     3.5,
+        material:  Cesium.Material.fromType('PolylineGlow', {
+          glowPower: 0.3,
+          color:     Cesium.Color.fromCssColorString('#fbbf24').withAlpha(0.75),
+        }),
+      });
     });
+    trackEntitiesRef.current.push(pastCol);
 
-    // Future track — bright cyan, hard to miss
+    // Future track — bright cyan
+    const futureCol = new Cesium.PolylineCollection();
+    viewer.scene.primitives.add(futureCol);
     futureSegments.forEach((seg, idx) => {
       if (seg.length < 2) return;
-      const alpha = idx === 0 ? 0.92 : 0.55;
-      added.push(viewer.entities.add({
-        polyline: {
-          positions:     seg,
-          width:         idx === 0 ? 3.5 : 2.5,
-          material:      new Cesium.PolylineGlowMaterialProperty({
-            glowPower: idx === 0 ? 0.45 : 0.2,
-            color:     Cesium.Color.fromCssColorString('#22d3ee').withAlpha(alpha),
-          }),
-          arcType:       Cesium.ArcType.NONE,
-          clampToGround: false,
-        },
-      }));
+      futureCol.add({
+        positions: seg,
+        width:     idx === 0 ? 3.5 : 2.5,
+        material:  Cesium.Material.fromType('PolylineGlow', {
+          glowPower: idx === 0 ? 0.45 : 0.2,
+          color:     Cesium.Color.fromCssColorString('#22d3ee').withAlpha(idx === 0 ? 0.92 : 0.55),
+        }),
+      });
     });
-
-    trackEntitiesRef.current = added;
+    trackEntitiesRef.current.push(futureCol);
   }, [tle]);
 
   // ── GeoJSON coastlines — once ─────────────────────────────────────────────
@@ -357,33 +353,18 @@ const MissionControl = () => {
     });
   }, [currentPosition]);
 
-  // ── Initial draw: wait for scene.postRender (true readiness signal) then draw
+  // ── Initial draw: poll until viewer + scene are ready, then draw ─────────
   useEffect(() => {
     if (!tle) return;
-
-    let drawn = false;
-    let pollTimer = null;
-    let removeListener = null;
-
-    const doInitialDraw = () => {
-      if (drawn) return;
-      drawn = true;
-      if (removeListener) { removeListener(); removeListener = null; }
+    let cancelled = false;
+    const tryDraw = () => {
+      if (cancelled) return;
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer || !viewer.scene) { setTimeout(tryDraw, 200); return; }
       drawGroundTrack();
     };
-
-    const waitForScene = () => {
-      const viewer = viewerRef.current?.cesiumElement;
-      if (!viewer) { pollTimer = setTimeout(waitForScene, 200); return; }
-      const listener = viewer.scene.postRender.addEventListener(() => {
-        viewer.scene.postRender.removeEventListener(listener);
-        doInitialDraw();
-      });
-      removeListener = () => viewer.scene.postRender.removeEventListener(listener);
-    };
-
-    pollTimer = setTimeout(waitForScene, 200);
-    return () => { clearTimeout(pollTimer); if (removeListener) removeListener(); };
+    const t = setTimeout(tryDraw, 400);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [tle, drawGroundTrack]);
 
   // ── Periodic ground track redraw every 60 s ────────────────────────────────
