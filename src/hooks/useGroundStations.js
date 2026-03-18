@@ -202,21 +202,41 @@ const useGroundStations = (viewerRef, currentSatPosition) => {
     stationEntitiesRef.current = added;
   }, [stations, currentSatPosition, viewerRef]);
 
-  // Redraw when stations or satellite position changes — retry until viewer ready
+  // Redraw when stations or satellite position changes
+  // If viewer is already running (normal case), draw immediately.
+  // On first mount when viewer isn't ready yet, wait for scene.postRender.
   useEffect(() => {
     if (!stations.length) return;
-    let attempts = 0;
-    let retryTimer = null;
-    const tryDraw = () => {
-      attempts++;
-      if (!viewerRef.current?.cesiumElement) {
-        if (attempts < 10) retryTimer = setTimeout(tryDraw, 400);
-        return;
-      }
+
+    const viewer = viewerRef.current?.cesiumElement;
+    if (viewer) {
+      drawStations();
+      return;
+    }
+
+    let drawn = false;
+    let pollTimer = null;
+    let removeListener = null;
+
+    const doFirstDraw = () => {
+      if (drawn) return;
+      drawn = true;
+      if (removeListener) { removeListener(); removeListener = null; }
       drawStations();
     };
-    retryTimer = setTimeout(tryDraw, 400);
-    return () => clearTimeout(retryTimer);
+
+    const waitForScene = () => {
+      const v = viewerRef.current?.cesiumElement;
+      if (!v) { pollTimer = setTimeout(waitForScene, 200); return; }
+      const listener = v.scene.postRender.addEventListener(() => {
+        v.scene.postRender.removeEventListener(listener);
+        doFirstDraw();
+      });
+      removeListener = () => v.scene.postRender.removeEventListener(listener);
+    };
+
+    pollTimer = setTimeout(waitForScene, 200);
+    return () => { clearTimeout(pollTimer); if (removeListener) removeListener(); };
   }, [stations, currentSatPosition, drawStations, viewerRef]);
 
   // ── Visibility helper for external use ───────────────────────────────

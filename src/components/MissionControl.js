@@ -135,7 +135,6 @@ const MissionControl = () => {
   const viewerRef          = useRef(null);
   const bordersLoadedRef   = useRef(false);
   const mountTimeRef       = useRef(Date.now());
-  const trackRedrawTimer   = useRef(null);
   const hasAutoCenteredRef = useRef(false);
   const imageryLoadedRef   = useRef(false);
 
@@ -358,32 +357,49 @@ const MissionControl = () => {
     });
   }, [currentPosition]);
 
-  // ── Trigger initial draw + 60 s redraw — after handleCenterView ──────────
+  // ── Initial draw: wait for scene.postRender (true readiness signal) then draw
   useEffect(() => {
-    if (!tle || !currentPosition) return;
+    if (!tle) return;
 
-    let attempts = 0;
-    let retryTimer = null;
-    const tryDraw = () => {
-      attempts++;
-      if (!viewerRef.current?.cesiumElement) {
-        if (attempts < 10) retryTimer = setTimeout(tryDraw, 400);
-        return;
-      }
+    let drawn = false;
+    let pollTimer = null;
+    let removeListener = null;
+
+    const doInitialDraw = () => {
+      if (drawn) return;
+      drawn = true;
+      if (removeListener) { removeListener(); removeListener = null; }
       drawGroundTrack();
-      if (!hasAutoCenteredRef.current) {
-        hasAutoCenteredRef.current = true;
-        handleCenterView();
-      }
     };
 
-    retryTimer = setTimeout(tryDraw, 800);
-    trackRedrawTimer.current = setInterval(() => drawGroundTrack(), 60 * 1000);
-    return () => {
-      clearTimeout(retryTimer);
-      clearInterval(trackRedrawTimer.current);
+    const waitForScene = () => {
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer) { pollTimer = setTimeout(waitForScene, 200); return; }
+      const listener = viewer.scene.postRender.addEventListener(() => {
+        viewer.scene.postRender.removeEventListener(listener);
+        doInitialDraw();
+      });
+      removeListener = () => viewer.scene.postRender.removeEventListener(listener);
     };
-  }, [tle, currentPosition, drawGroundTrack, handleCenterView]);
+
+    pollTimer = setTimeout(waitForScene, 200);
+    return () => { clearTimeout(pollTimer); if (removeListener) removeListener(); };
+  }, [tle, drawGroundTrack]);
+
+  // ── Periodic ground track redraw every 60 s ────────────────────────────────
+  useEffect(() => {
+    if (!tle) return;
+    const id = setInterval(() => drawGroundTrack(), 60 * 1000);
+    return () => clearInterval(id);
+  }, [tle, drawGroundTrack]);
+
+  // ── Auto-center once when position first becomes available ─────────────────
+  useEffect(() => {
+    if (!currentPosition || hasAutoCenteredRef.current) return;
+    if (!viewerRef.current?.cesiumElement) return;
+    hasAutoCenteredRef.current = true;
+    handleCenterView();
+  }, [currentPosition, handleCenterView]);
 
   // ── View mode toggle — 3D ↔ 2D ───────────────────────────────────────────
   const handleToggleView = useCallback(() => {

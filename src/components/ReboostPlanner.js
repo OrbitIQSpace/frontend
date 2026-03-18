@@ -467,39 +467,55 @@ const ReboostPlanner = () => {
     });
   }, [tle]);
 
-  // ── Auto-center + initial track draw ──────────────────────────────────────
+  // ── Initial draw: wait for scene.postRender (true readiness signal) then draw
   useEffect(() => {
-    if (!tle || !currentPosition) return;
+    if (!tle) return;
 
-    let attempts = 0;
-    const tryDraw = () => {
-      attempts++;
-      if (!viewerRef.current?.cesiumElement) {
-        if (attempts < 10) setTimeout(tryDraw, 400);
-        return;
-      }
+    let drawn = false;
+    let pollTimer = null;
+    let removeListener = null;
+
+    const doInitialDraw = () => {
+      if (drawn) return;
+      drawn = true;
+      if (removeListener) { removeListener(); removeListener = null; }
       drawCurrentTrack();
-      if (!hasAutoCenteredRef.current) {
-        hasAutoCenteredRef.current = true;
-        viewerRef.current.cesiumElement.camera.flyTo({
-          destination: Cesium.Cartesian3.fromRadians(
-            currentPosition.lng,
-            currentPosition.lat,
-            currentPosition.height + 9000000
-          ),
-          orientation: {
-            heading: Cesium.Math.toRadians(0),
-            pitch:   Cesium.Math.toRadians(-90),
-            roll:    0,
-          },
-          duration: 1.5,
-        });
-      }
     };
 
-    const timer = setTimeout(tryDraw, 1000);
-    return () => clearTimeout(timer);
-  }, [tle, currentPosition, drawCurrentTrack]);
+    const waitForScene = () => {
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer) { pollTimer = setTimeout(waitForScene, 200); return; }
+      const listener = viewer.scene.postRender.addEventListener(() => {
+        viewer.scene.postRender.removeEventListener(listener);
+        doInitialDraw();
+      });
+      removeListener = () => viewer.scene.postRender.removeEventListener(listener);
+    };
+
+    pollTimer = setTimeout(waitForScene, 200);
+    return () => { clearTimeout(pollTimer); if (removeListener) removeListener(); };
+  }, [tle, drawCurrentTrack]);
+
+  // ── Auto-center once when position first becomes available ─────────────────
+  useEffect(() => {
+    if (!currentPosition || hasAutoCenteredRef.current) return;
+    const viewer = viewerRef.current?.cesiumElement;
+    if (!viewer) return;
+    hasAutoCenteredRef.current = true;
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromRadians(
+        currentPosition.lng,
+        currentPosition.lat,
+        currentPosition.height + 9000000
+      ),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch:   Cesium.Math.toRadians(-90),
+        roll:    0,
+      },
+      duration: 1.5,
+    });
+  }, [currentPosition]);
 
   // ── GeoJSON coastlines ─────────────────────────────────────────────────────
   useEffect(() => {
