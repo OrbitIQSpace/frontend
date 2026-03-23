@@ -10,6 +10,7 @@ import { Viewer, Entity } from 'resium';
 import * as Cesium from 'cesium';
 import { getSatelliteInfo } from 'tle.js';
 import useGroundStations from '../hooks/useGroundStations';
+import { sanitizeGeoJsonSource } from '../utils/cesiumUtils';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -523,12 +524,7 @@ const ReboostPlanner = () => {
       'https://raw.githubusercontent.com/datasets/geo-boundaries-world-110m/master/countries.geojson',
       { stroke: Cesium.Color.fromCssColorString('rgba(180,180,180,0.15)'), fill: Cesium.Color.TRANSPARENT, strokeWidth: 0.8 }
     ).then(src => {
-      src.entities.values.forEach(e => {
-        if (e.polyline) {
-          e.polyline.clampToGround = false;
-          e.polyline.arcType = new Cesium.ConstantProperty(Cesium.ArcType.NONE);
-        }
-      });
+      sanitizeGeoJsonSource(src, 'rgba(180,180,180,0.15)');
       viewer.dataSources.add(src);
     }).catch(() => {});
   }, [currentPosition]);
