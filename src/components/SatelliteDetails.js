@@ -366,6 +366,15 @@ const SatelliteDetails = () => {
           >
             <span style={{ fontSize: '16px' }}>◎</span> Maneuver Sandbox
           </button>
+          <button
+            onClick={() => (window.location.href = `/satellite/${noradId}/lifetime`)}
+            className="flex-1 min-w-[180px] px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all font-mono text-white flex items-center justify-center gap-2"
+            style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(52,211,153,0.3)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(52,211,153,0.15)')}
+          >
+            <span style={{ fontSize: '16px' }}>⟳</span> Lifetime Forecast
+          </button>
         </div>
 
         {/* ── Stats Strip ────────────────────────────────────────────────── */}

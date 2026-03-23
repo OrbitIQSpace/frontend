@@ -7,6 +7,7 @@ import SatelliteDetails from './components/SatelliteDetails';
 import MissionControl from './components/MissionControl';
 import ManeuverSandbox from './components/ManeuverSandbox';
 import ReboostPlanner from './components/ReboostPlanner';
+import LifetimeForecaster from './components/LifetimeForecaster';
 import GroundStations from './pages/GroundStations';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -285,6 +286,13 @@ const AppContent = ({ isAddModalOpen, setIsAddModalOpen, handleSatelliteAdded, r
           <Route path="/satellite/:noradId/reboost" element={
             <SignedIn>
               <ReboostPlanner />
+            </SignedIn>
+          } />
+
+          {/* LIFETIME FORECASTER */}
+          <Route path="/satellite/:noradId/lifetime" element={
+            <SignedIn>
+              <LifetimeForecaster />
             </SignedIn>
           } />
 
