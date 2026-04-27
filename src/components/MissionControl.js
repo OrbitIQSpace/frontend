@@ -34,7 +34,7 @@ const computeGroundTrack = (tle, startMs, durationMin, stepSec = 30) => {
     try {
       const info = getSatelliteInfo(tle, t);
       if (info && typeof info.lat === 'number' && !isNaN(info.lat)) {
-        positions.push(Cesium.Cartesian3.fromDegrees(info.lng, info.lat, 8000));
+        positions.push(Cesium.Cartesian3.fromDegrees(info.lng, info.lat, (info.height || 420) * 1000));
       }
     } catch {}
   }

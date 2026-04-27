@@ -103,8 +103,10 @@ const capabilities = [
   { title: 'Orbital Analysis',    color: '#22d3ee', spec: 'TLE history · apogee/perigee drift · eccentricity · B*' },
   { title: 'System Health',       color: '#a78bfa', spec: 'CSV telemetry · battery charting · subsystem trends' },
   { title: 'Mission Control',     color: '#f97316', spec: '3D Cesium globe · state vector · orbital params' },
-  { title: 'Reboost Planner',     color: '#f97316', spec: '90-day decay · Hohmann Δv · Tsiolkovsky fuel · 7-day scan' },
+  { title: 'Ground Stations',     color: '#22d3ee', spec: 'Account-wide network · footprint coverage · contact windows' },
+  { title: 'Reboost Planner',     color: '#f97316', spec: 'Hohmann Δv · Tsiolkovsky fuel · 7-day burn window scan' },
   { title: 'Maneuver Sandbox',    color: '#818cf8', spec: 'First-order burn sim · prograde/retro/radial · Δv slider' },
+  { title: 'Lifetime Forecaster', color: '#34d399', spec: 'AI optimizer · 1–3 yr simulation · 50+ strategies · reboost schedule' },
 ];
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -287,10 +289,10 @@ const Landing = () => {
 
               {/* Quick stats strip */}
               <div className="mt-8 flex flex-wrap gap-2">
-                <StatBadge label="SGP4 Propagation · 3s" color="#22d3ee" />
-                <StatBadge label="Hohmann Transfer Δv"   color="#f97316" />
-                <StatBadge label="90-Day Decay Forecast" color="#34d399" />
-                <StatBadge label="7-Day Burn Windows"    color="#22d3ee" />
+                <StatBadge label="SGP4 Propagation · 3s"   color="#22d3ee" />
+                <StatBadge label="Hohmann Transfer Δv"     color="#f97316" />
+                <StatBadge label="1–3 yr Lifetime Forecast" color="#34d399" />
+                <StatBadge label="AI Reboost Optimizer"    color="#a78bfa" />
               </div>
             </Reveal>
 
@@ -339,7 +341,7 @@ const Landing = () => {
               The full picture. Every orbit.
             </h2>
             <p className="mt-3 text-sm max-w-xl" style={{ color: '#64748b' }}>
-              Six integrated modules covering every phase of LEO satellite operations.
+              Eight integrated modules covering every phase of LEO satellite operations.
             </p>
           </div>
 
@@ -680,6 +682,214 @@ const Landing = () => {
             </DataPanel>
 
           </div>{/* end 2-col grid */}
+
+          {/* Second row — Ground Stations + Lifetime Forecaster */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+
+            {/* Panel D — Ground Stations */}
+            <DataPanel label="Ground Station Network · Coverage" accent="#22d3ee">
+
+              {/* Sub-section header */}
+              <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(30,41,59,0.5)' }}>
+                <p className="font-mono uppercase mb-1" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#22d3ee' }}>
+                  Ground Station Network · Coverage
+                </p>
+                <p className="font-mono" style={{ fontSize: '8px', color: '#1e3a5f' }}>
+                  ACCOUNT-WIDE · 3 STATIONS ACTIVE · FOOTPRINT LIVE
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'rgba(30,41,59,0.4)' }}>
+
+                {/* Left — metrics + globe SVG */}
+                <div className="p-4">
+                  <DataRow label="Station Count"   value="3 active"  color="#22d3ee" />
+                  <DataRow label="Total Coverage"  value="~38%"       color="#34d399" />
+                  <DataRow label="Elevation Mask"  value="5°"         color="white" />
+
+                  {/* Globe with footprint arcs */}
+                  <div className="mt-4">
+                    <svg viewBox="0 0 120 100" width="100%" height="90">
+                      {/* Globe */}
+                      <circle cx="60" cy="50" r="38" fill="rgba(2,6,23,0.8)" stroke="rgba(34,211,238,0.15)" strokeWidth="0.8" />
+                      {/* Lat lines */}
+                      {[-20, 0, 20].map((lat, i) => {
+                        const cy = 50 - lat * 0.55;
+                        const rx = Math.sqrt(Math.max(0, 38 * 38 - (cy - 50) * (cy - 50)));
+                        return <ellipse key={i} cx="60" cy={cy} rx={rx} ry="4" fill="none" stroke="rgba(34,211,238,0.08)" strokeWidth="0.5" />;
+                      })}
+                      {/* Lng lines */}
+                      {[-1, 0, 1].map((i) => (
+                        <ellipse key={i} cx="60" cy="50" rx={i === 0 ? 0 : 15} ry="38" fill="none" stroke="rgba(34,211,238,0.08)" strokeWidth="0.5" transform={`rotate(${i * 45} 60 50)`} />
+                      ))}
+                      {/* Footprint circles */}
+                      <circle cx="48" cy="36" r="14" fill="rgba(52,211,153,0.08)" stroke="#34d399" strokeWidth="0.8" opacity="0.7" />
+                      <circle cx="72" cy="44" r="13" fill="rgba(34,211,238,0.06)" stroke="#22d3ee" strokeWidth="0.8" opacity="0.7" />
+                      <circle cx="56" cy="62" r="12" fill="rgba(52,211,153,0.06)" stroke="#34d399" strokeWidth="0.8" opacity="0.6" />
+                      {/* Station dots */}
+                      <circle cx="48" cy="36" r="2" fill="#34d399" />
+                      <circle cx="72" cy="44" r="2" fill="#22d3ee" />
+                      <circle cx="56" cy="62" r="2" fill="#34d399" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Right — station status rows */}
+                <div className="p-4">
+                  <p className="font-mono uppercase mb-3" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#22d3ee' }}>
+                    Station Status
+                  </p>
+                  {[
+                    { name: 'ALPHA-1 · Kennedy SC', range: true },
+                    { name: 'BRAVO-2 · Vandenberg',  range: true },
+                    { name: 'CHARLIE-3 · Fairbanks', range: false },
+                    { name: 'DELTA-4 · McMurdo',     range: false },
+                  ].map(({ name, range }) => (
+                    <div
+                      key={name}
+                      className="flex items-center justify-between rounded mb-1.5 px-2 py-1.5"
+                      style={{ background: 'rgba(2,6,23,0.6)', border: '1px solid rgba(30,41,59,0.5)' }}
+                    >
+                      <span className="font-mono" style={{ fontSize: '8px', color: '#475569' }}>{name}</span>
+                      <span
+                        className="font-mono px-1.5 py-0.5 rounded"
+                        style={{
+                          fontSize: '7px',
+                          letterSpacing: '0.15em',
+                          background: range ? 'rgba(52,211,153,0.12)' : 'rgba(71,85,105,0.12)',
+                          border: `1px solid ${range ? 'rgba(52,211,153,0.3)' : 'rgba(71,85,105,0.3)'}`,
+                          color: range ? '#34d399' : '#475569',
+                        }}
+                      >
+                        {range ? 'IN RANGE' : 'OUT OF RANGE'}
+                      </span>
+                    </div>
+                  ))}
+                  <p className="font-mono mt-3" style={{ fontSize: '7px', color: '#334155', letterSpacing: '0.1em' }}>
+                    Coverage footprints recalculate live as satellite position updates
+                  </p>
+                </div>
+
+              </div>
+            </DataPanel>
+
+            {/* Panel E — Lifetime Forecaster */}
+            <DataPanel label="AI Lifetime Optimizer · Active" accent="#34d399">
+
+              {/* Sub-section header */}
+              <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid rgba(30,41,59,0.5)' }}>
+                <p className="font-mono uppercase mb-1" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#34d399' }}>
+                  AI Lifetime Optimizer · Active
+                </p>
+                <p className="font-mono" style={{ fontSize: '8px', color: '#1e3a5f' }}>
+                  DEMO-SAT-1 · LEO 421km · 80kg wet · Isp 220s
+                </p>
+              </div>
+
+              {/* Key metrics 2×2 grid */}
+              <div className="grid grid-cols-2 gap-0" style={{ borderBottom: '1px solid rgba(30,41,59,0.5)' }}>
+                {[
+                  { label: 'Natural Deorbit', value: '2026-08-12', color: '#f87171' },
+                  { label: 'Optimized',       value: '2028-03-22', color: '#34d399' },
+                  { label: 'Extension',       value: '+19 months', color: '#34d399' },
+                  { label: 'Reboosts',        value: '4 burns',    color: '#22d3ee' },
+                ].map(({ label, value, color }, i) => (
+                  <div
+                    key={label}
+                    className="px-4 py-3"
+                    style={{
+                      borderRight: i % 2 === 0 ? '1px solid rgba(30,41,59,0.4)' : 'none',
+                      borderBottom: i < 2 ? '1px solid rgba(30,41,59,0.4)' : 'none',
+                    }}
+                  >
+                    <p className="font-mono uppercase mb-1" style={{ fontSize: '7px', letterSpacing: '0.2em', color: '#334155' }}>{label}</p>
+                    <p className="font-mono font-bold text-xs" style={{ color }}>{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Dual-line altitude chart */}
+              <div className="px-4 pt-4 pb-2" style={{ borderBottom: '1px solid rgba(30,41,59,0.5)' }}>
+                <svg viewBox="0 0 300 90" width="100%" height="90">
+                  {/* Background */}
+                  <rect x="0" y="0" width="300" height="90" fill="rgba(52,211,153,0.01)" />
+                  {/* Grid lines */}
+                  {[10, 28, 46, 64, 82].map(y => (
+                    <line key={y} x1="32" y1={y} x2="300" y2={y} stroke="rgba(30,41,59,0.35)" strokeWidth="0.5" />
+                  ))}
+                  {/* Y-axis labels */}
+                  {[
+                    { y: 10, label: '430' },
+                    { y: 28, label: '420' },
+                    { y: 46, label: '410' },
+                    { y: 64, label: '400' },
+                    { y: 82, label: '390' },
+                  ].map(({ y, label }) => (
+                    <text key={label} x="28" y={y + 3} fill="#334155" fontSize="7" fontFamily="monospace" textAnchor="end">{label}</text>
+                  ))}
+                  {/* Natural decay curve — smooth downward bezier (red dashed) */}
+                  <path
+                    d="M 32,12 C 80,16 130,28 180,46 S 250,68 300,82"
+                    fill="none" stroke="#f87171" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.7"
+                  />
+                  {/* Optimized staircase curve (cyan solid) — 3 reboost jumps */}
+                  <polyline
+                    points="32,12 90,22 90,11 150,20 150,10 210,19 210,10 300,22"
+                    fill="none" stroke="#34d399" strokeWidth="1.5" opacity="0.9"
+                  />
+                  {/* Reboost jump dots */}
+                  {[[90,11],[150,10],[210,10]].map(([cx,cy],i) => (
+                    <circle key={i} cx={cx} cy={cy} r="2.5" fill="#34d399" opacity="0.8" />
+                  ))}
+                  {/* Start dot */}
+                  <circle cx="32" cy="12" r="2.5" fill="#34d399" />
+                  {/* Reentry threshold dashed line */}
+                  <line x1="32" y1="85" x2="300" y2="85" stroke="rgba(239,68,68,0.35)" strokeWidth="0.8" strokeDasharray="3 4" />
+                  <text x="34" y="83" fill="rgba(239,68,68,0.4)" fontSize="6" fontFamily="monospace">REENTRY</text>
+                </svg>
+                {/* Legend */}
+                <div className="flex items-center gap-5 mt-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-4 h-0.5 inline-block rounded-full" style={{ background: '#34d399' }} />
+                    <span className="font-mono" style={{ fontSize: '7px', color: '#34d399' }}>Optimized</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <svg width="16" height="4" viewBox="0 0 16 4"><line x1="0" y1="2" x2="16" y2="2" stroke="#f87171" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.7" /></svg>
+                    <span className="font-mono" style={{ fontSize: '7px', color: '#f87171' }}>Natural decay</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reboost schedule table */}
+              <div className="px-4 py-4">
+                <p className="font-mono uppercase mb-3" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#34d399' }}>
+                  Optimal Reboost Schedule
+                </p>
+                {[
+                  { date: 'JUN 2026', from: '408', to: '421', dv: '10.2 m/s', fuel: '0.7 kg' },
+                  { date: 'DEC 2026', from: '409', to: '421', dv: '9.8 m/s',  fuel: '0.7 kg' },
+                  { date: 'AUG 2027', from: '407', to: '421', dv: '10.5 m/s', fuel: '0.8 kg' },
+                ].map((row, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between rounded mb-1.5 px-3 py-2"
+                    style={{ background: 'rgba(2,6,23,0.6)', border: '1px solid rgba(30,41,59,0.5)' }}
+                  >
+                    <span className="font-mono" style={{ fontSize: '8px', color: '#475569' }}>{row.date}</span>
+                    <span className="font-mono" style={{ fontSize: '8px', color: '#334155' }}>{row.from}→{row.to} km</span>
+                    <span className="font-mono font-bold" style={{ fontSize: '8px', color: '#34d399' }}>{row.dv}</span>
+                    <span className="font-mono" style={{ fontSize: '8px', color: '#475569' }}>{row.fuel}</span>
+                  </div>
+                ))}
+                <p className="font-mono mt-3" style={{ fontSize: '7px', color: '#0891b2', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
+                  50 scenarios simulated · Exponential atmosphere model · Tsiolkovsky propellant
+                </p>
+              </div>
+
+            </DataPanel>
+
+          </div>{/* end second row */}
+
         </div>
       </section>
 
@@ -800,7 +1010,7 @@ const Landing = () => {
                 03
               </span>
               <p className="font-mono uppercase mb-4" style={{ fontSize: '8px', letterSpacing: '0.3em', color: '#34d399' }}>
-                Plan and Execute
+                Forecast and Optimize
               </p>
               <div
                 className="rounded-lg p-3 mb-4 font-mono"
@@ -809,14 +1019,15 @@ const Landing = () => {
                   border: '1px solid rgba(30,41,59,0.6)',
                 }}
               >
-                <p style={{ fontSize: '9px', color: '#34d399' }}>{'>'} REBOOST WINDOW FOUND · MAR 14</p>
-                <p style={{ fontSize: '9px', color: '#94a3b8' }}>{'>'} Δv: 24.2 m/s · Fuel: 1.8 kg</p>
+                <p style={{ fontSize: '9px', color: '#34d399' }}>{'>'} LIFETIME FORECAST COMPLETE</p>
+                <p style={{ fontSize: '9px', color: '#94a3b8' }}>{'>'} Natural deorbit:  2026-08-12</p>
+                <p style={{ fontSize: '9px', color: '#94a3b8' }}>{'>'} Optimized:        2028-03-22</p>
                 <p style={{ fontSize: '9px', color: '#34d399' }}>
-                  {'>'} BURN SCHEDULED ✓<span className="terminal-cursor" style={{ background: '#34d399' }} />
+                  {'>'} Extension:        +19 months ✓<span className="terminal-cursor" style={{ background: '#34d399' }} />
                 </p>
               </div>
               <p className="text-xs leading-relaxed" style={{ color: '#64748b' }}>
-                Use the Reboost Planner to calculate the Hohmann transfer, scan for burn windows, and compute Tsiolkovsky fuel cost.
+                The Lifetime Forecaster simulates 50+ reboost strategies and returns the optimal schedule — exactly when to burn, how much Δv, and how much fuel each maneuver costs.
               </p>
             </div>
 
@@ -856,7 +1067,7 @@ const Landing = () => {
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
                 </span>
                 <span className="font-mono uppercase" style={{ fontSize: '9px', letterSpacing: '0.3em', color: '#34d399' }}>
-                  Live · 6 Modules Active
+                  Live · 8 Modules Active
                 </span>
               </div>
 
@@ -906,7 +1117,7 @@ const Landing = () => {
               {[
                 { color: '#34d399', text: 'Extend mission lifespan through precision altitude maintenance — every reboost adds months.' },
                 { color: '#f97316', text: 'Know your Δv budget before you burn. Tsiolkovsky-calculated fuel cost for every maneuver.' },
-                { color: '#22d3ee', text: 'Catch orbital decay early. 90-day altitude forecasts flag intervention windows before they become emergencies.' },
+                { color: '#34d399', text: 'AI-optimized lifetime forecast: simulate 50+ reboost strategies and get the schedule that maximizes remaining mission life.' },
                 { color: '#818cf8', text: 'Simulate before you commit. Test burn parameters in the Sandbox, then execute with confidence.' },
               ].map(({ color, text }, i) => (
                 <div key={i} className="flex items-start gap-3 mb-5 last:mb-0">
@@ -921,9 +1132,9 @@ const Landing = () => {
                 style={{ borderTop: '1px solid rgba(30,41,59,0.5)' }}
               >
                 {[
-                  { value: '6',       label: 'live modules',    color: '#22d3ee' },
-                  { value: '3s',      label: 'position update', color: '#34d399' },
-                  { value: '90 days', label: 'decay forecast',  color: '#f97316' },
+                  { value: '8',    label: 'live modules',      color: '#22d3ee' },
+                  { value: '3s',   label: 'position update',   color: '#34d399' },
+                  { value: '3 yr', label: 'lifetime forecast', color: '#f97316' },
                 ].map(({ value, label, color }) => (
                   <div key={label} className="text-center">
                     <p className="font-black italic" style={{ fontSize: '1.5rem', color, lineHeight: 1 }}>{value}</p>

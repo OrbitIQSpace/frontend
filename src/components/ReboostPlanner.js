@@ -55,7 +55,7 @@ const computeGroundTrack = (tle, startMs, durationMin, stepSec = 30) => {
     try {
       const info = getSatelliteInfo(tle, t);
       if (info && typeof info.lat === 'number' && !isNaN(info.lat)) {
-        positions.push(Cesium.Cartesian3.fromDegrees(info.lng, info.lat, 10000));
+        positions.push(Cesium.Cartesian3.fromDegrees(info.lng, info.lat, (info.height || 420) * 1000));
       }
     } catch {}
   }
@@ -582,7 +582,7 @@ const ReboostPlanner = () => {
       const trackPositions   = computeGroundTrack(tle, Date.now(), periodMin, 30);
       const reboostPositions = trackPositions.map(p => {
         const cart = Cesium.Cartographic.fromCartesian(p);
-        return Cesium.Cartesian3.fromRadians(cart.longitude, cart.latitude, targetAlt * 1000 + 10000);
+        return Cesium.Cartesian3.fromRadians(cart.longitude, cart.latitude, targetAlt * 1000);
       });
 
       // PolylineCollection: direct GPU submit, no async geometry worker
